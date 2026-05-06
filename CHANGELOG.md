@@ -4,6 +4,20 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19219] — 2026-05-06
+
+### Added
+- **Event editor user picker: "Hide non-members" toggle.** Pairs with the v0.19218 membership tag. When the event has a league selected, a small slider toggle ("Hide non-members") appears under the All Users search box. Flipping it on hides every row whose `is_league_member` flag is 0, so an admin can collapse the full-user dump down to just the league roster without typing a search. Toggle is hidden (and forced off) when no league is selected, since the badge itself is also hidden in that case. Plays nicely with the search box: filters compose (text match AND member match). Re-fetching on a league change rebuilds the list, but the toggle's checked state is preserved unless the league is cleared.
+
+---
+
+## [v0.19218] — 2026-05-06
+
+### Added
+- **Event editor user picker: league-membership tag.** When editing an event with a league selected, every row in the All Users list now shows a small **Member** (green) or **Not a member** (gray) pill next to the name. For admins (who see the entire users table) this makes it obvious which invitees fall inside the league boundary. For non-admins, the picker is mostly league members already, but personal contacts merged in are tagged so it's clear which of your contacts are also in the league. Tag is hidden when the event has no league selected. Implementation: `calendar_contacts_dl.php` precomputes `league_members.user_id` once per request and emits `is_league_member` (0/1) on every row; `buildAllUsersList()` reads `eLeagueId` and only appends the badge when a league is picked. The dropdown's existing change handler already calls `refreshUserList()`, so swapping leagues re-fetches and re-tags automatically. No schema changes.
+
+---
+
 ## [v0.19217] — 2026-05-06
 
 ### Changed

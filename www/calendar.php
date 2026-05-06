@@ -1283,6 +1283,9 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
         .invite-pane-list li.dimmed:hover { background:transparent; }
         .invite-pane-list li.custom-row { padding:.2rem .4rem;cursor:default; }
         .invite-pane-list li.custom-row:hover { background:transparent; }
+        .inv-mem-tag { display:inline-block;font-size:.7rem;font-weight:700;text-transform:uppercase;padding:.05rem .4rem;border-radius:999px;margin-left:.4rem;vertical-align:middle; }
+        .inv-mem-yes { background:#dcfce7;color:#166534; }
+        .inv-mem-no  { background:#e2e8f0;color:#475569; }
         .custom-row-inner { display:flex;gap:.3rem;align-items:center;flex-wrap:wrap; }
         .custom-row-inner input { padding:.28rem .45rem;border:1.5px solid #e2e8f0;border-radius:5px;font-size:.8rem;min-width:0; }
         .custom-row-inner .cr-name    { flex:1.5;min-width:110px; }
@@ -1876,6 +1879,11 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
                     <input type="text" id="eUserSearch" class="invite-pane-search"
                            placeholder="<?= $isAdmin ? 'Search name, email, phone&hellip;' : 'Search name&hellip;' ?>"
                            oninput="filterAllUsers(this.value)" autocomplete="off">
+                    <label id="eHideNonMembersWrap" style="display:none;align-items:center;gap:.4rem;padding:.25rem .65rem .35rem;font-size:.75rem;color:#64748b;cursor:pointer">
+                        <input type="checkbox" id="eHideNonMembers" class="pk-toggle-input" onchange="onHideNonMembersChange()">
+                        <span class="pk-toggle-sm"></span>
+                        <span>Hide non-members</span>
+                    </label>
                     <ul class="invite-pane-list" id="eAllUsersList"></ul>
                 </div>
                 <!-- Center: arrow buttons (desktop: left/right, mobile: up/down) -->
@@ -2742,6 +2750,14 @@ const isMobileInvite = window.matchMedia('(max-width: 1024px)').matches;
 function buildAllUsersList() {
     const ul = document.getElementById('eAllUsersList');
     ul.innerHTML = '';
+    const lgSel = document.getElementById('eLeagueId');
+    const leagueSelected = !!(lgSel && parseInt(lgSel.value, 10) > 0);
+    const hideWrap = document.getElementById('eHideNonMembersWrap');
+    if (hideWrap) hideWrap.style.display = leagueSelected ? 'flex' : 'none';
+    if (!leagueSelected) {
+        const hideCb = document.getElementById('eHideNonMembers');
+        if (hideCb) hideCb.checked = false;
+    }
     ALL_USERS.forEach(u => {
         const display = u.display_name || u.username;
         // For pending invitees the synthetic username is a phone number or "pending:NN".
@@ -2756,12 +2772,19 @@ function buildAllUsersList() {
         li.dataset.uname    = savedName;
         li.dataset.uemail   = u.email     || '';
         li.dataset.uphone   = u.phone     || '';
+        li.dataset.member   = u.is_league_member ? '1' : '0';
         li.textContent = display;
         if (u.is_pending) {
             const tag = document.createElement('span');
             tag.textContent = ' (pending)';
             tag.style.cssText = 'color:#92400e;font-size:.75rem;margin-left:.25rem';
             li.appendChild(tag);
+        }
+        if (leagueSelected) {
+            const memTag = document.createElement('span');
+            memTag.className = 'inv-mem-tag ' + (u.is_league_member ? 'inv-mem-yes' : 'inv-mem-no');
+            memTag.textContent = u.is_league_member ? 'Member' : 'Not a member';
+            li.appendChild(memTag);
         }
         li.title = 'Click to select, then use arrows to invite';
         li.addEventListener('click', function(e) {
@@ -2792,14 +2815,22 @@ function refreshUserList() {
 function filterAllUsers(q) {
     const raw    = (q || '').toLowerCase();
     const digits = raw.replace(/\D/g,'');
+    const hideCb = document.getElementById('eHideNonMembers');
+    const hideNonMembers = !!(hideCb && hideCb.checked);
     document.querySelectorAll('#eAllUsersList li:not(.custom-row)').forEach(li => {
-        const match = !raw ||
+        const textMatch = !raw ||
             (li.dataset.username && li.dataset.username.includes(raw)) ||
             (li.dataset.display  && li.dataset.display.includes(raw))  ||
             (li.dataset.email    && li.dataset.email.includes(raw))    ||
             (digits && li.dataset.phone && li.dataset.phone.includes(digits));
-        li.style.display = match ? '' : 'none';
+        const memberMatch = !hideNonMembers || li.dataset.member === '1';
+        li.style.display = (textMatch && memberMatch) ? '' : 'none';
     });
+}
+
+function onHideNonMembersChange() {
+    const searchEl = document.getElementById('eUserSearch');
+    filterAllUsers(searchEl ? searchEl.value : '');
 }
 
 // ── Invited pane ──────────────────────────────────────────────────────────────

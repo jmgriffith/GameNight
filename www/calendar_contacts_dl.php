@@ -21,6 +21,17 @@ $league_id = (int)($_GET['league_id'] ?? 0);
 $users = [];
 $seen  = []; // dedup by username-key
 
+// Pre-compute the league's registered-member user_ids so each emitted row
+// can be tagged is_league_member. Empty when no league selected.
+$leagueMemberIds = [];
+if ($league_id > 0) {
+    $lm = $db->prepare('SELECT user_id FROM league_members WHERE league_id = ? AND user_id IS NOT NULL');
+    $lm->execute([$league_id]);
+    foreach ($lm->fetchAll(PDO::FETCH_COLUMN) as $mid) {
+        $leagueMemberIds[(int)$mid] = true;
+    }
+}
+
 function _add_seen(array &$users, array &$seen, array $row): void {
     $key = strtolower($row['username'] ?? '');
     if ($key === '' || isset($seen[$key])) return;
@@ -29,14 +40,15 @@ function _add_seen(array &$users, array &$seen, array $row): void {
 }
 
 if ($isAdmin) {
-    $rows = $db->query('SELECT username, email, phone FROM users ORDER BY LOWER(username)')->fetchAll();
+    $rows = $db->query('SELECT id, username, email, phone FROM users ORDER BY LOWER(username)')->fetchAll();
     foreach ($rows as $r) {
         _add_seen($users, $seen, [
-            'username'     => $r['username'],
-            'email'        => $r['email'] ?? '',
-            'phone'        => $r['phone'] ?? '',
-            'display_name' => $r['username'],
-            'is_pending'   => 0,
+            'username'         => $r['username'],
+            'email'            => $r['email'] ?? '',
+            'phone'            => $r['phone'] ?? '',
+            'display_name'     => $r['username'],
+            'is_pending'       => 0,
+            'is_league_member' => isset($leagueMemberIds[(int)$r['id']]) ? 1 : 0,
         ]);
     }
     // Admins also need pending (not-yet-signed-up) league members in the picker
@@ -50,7 +62,8 @@ if ($isAdmin) {
                     contact_email AS email,
                     contact_phone AS phone,
                     contact_name  AS display_name,
-                    1             AS is_pending
+                    1             AS is_pending,
+                    1             AS is_league_member
              FROM league_members
              WHERE league_id = ? AND user_id IS NULL
              ORDER BY LOWER(contact_name)"
@@ -65,11 +78,12 @@ if ($isAdmin) {
 
 // The current user should always appear in their own picker so they can invite themselves.
 _add_seen($users, $seen, [
-    'username'     => $current['username'],
-    'email'        => $current['email']    ?? '',
-    'phone'        => $current['phone']    ?? '',
-    'display_name' => $current['username'] . ' (you)',
-    'is_pending'   => 0,
+    'username'         => $current['username'],
+    'email'            => $current['email']    ?? '',
+    'phone'            => $current['phone']    ?? '',
+    'display_name'     => $current['username'] . ' (you)',
+    'is_pending'       => 0,
+    'is_league_member' => ($league_id > 0 && isset($leagueMemberIds[$uid])) ? 1 : 0,
 ]);
 
 // ── Personal contacts (always included for non-admin) ──────────────────
@@ -78,7 +92,8 @@ $pc = $db->prepare(
             c.contact_email AS email,
             c.contact_phone AS phone,
             c.contact_name  AS display_name,
-            CASE WHEN c.linked_user_id IS NULL THEN 1 ELSE 0 END AS is_pending
+            CASE WHEN c.linked_user_id IS NULL THEN 1 ELSE 0 END AS is_pending,
+            c.linked_user_id AS _linked_uid
      FROM user_contacts c
      LEFT JOIN users u ON u.id = c.linked_user_id
      WHERE c.owner_user_id = ?
@@ -86,6 +101,13 @@ $pc = $db->prepare(
 );
 $pc->execute([$uid]);
 $personal = $pc->fetchAll();
+foreach ($personal as &$_pcRow) {
+    $_pcRow['is_league_member'] = ($league_id > 0
+        && !empty($_pcRow['_linked_uid'])
+        && isset($leagueMemberIds[(int)$_pcRow['_linked_uid']])) ? 1 : 0;
+    unset($_pcRow['_linked_uid']);
+}
+unset($_pcRow);
 
 if ($league_id > 0) {
     // Must be a member of this league to see its roster.
@@ -97,7 +119,8 @@ if ($league_id > 0) {
 
     // Linked members of the league
     $q1 = $db->prepare(
-        "SELECT u.username, u.email, u.phone, u.username AS display_name, 0 AS is_pending
+        "SELECT u.username, u.email, u.phone, u.username AS display_name,
+                0 AS is_pending, 1 AS is_league_member
          FROM league_members lm
          JOIN users u ON u.id = lm.user_id
          WHERE lm.league_id = ? AND u.id <> ?
@@ -116,7 +139,8 @@ if ($league_id > 0) {
                 contact_email AS email,
                 contact_phone AS phone,
                 contact_name  AS display_name,
-                1             AS is_pending
+                1             AS is_pending,
+                1             AS is_league_member
          FROM league_members
          WHERE league_id = ? AND user_id IS NULL
          ORDER BY LOWER(contact_name)"
