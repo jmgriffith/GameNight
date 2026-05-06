@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19220] — 2026-05-06
+
+### Changed
+- **Tournament timer "Save As" is now a single dialog.** The blind-structure preset Save As flow used to fire two sequential native browser prompts, the first for the preset name and a second free-text prompt where you had to read a numbered list ("0: Personal, G: Global, 1: League — Foo...") and type the matching code. Now both fields live in one overlay modal — a real text input for the name and a real `<select>` dropdown for "Save to" with the same options (Personal / Global if admin / one row per league you manage). Enter in the name field submits; click-outside, Cancel, and the X all dismiss without saving. Backend POST to `/timer_dl.php?action=save_preset` is unchanged — same `name`, `is_global`, `league_id` fields go over the wire.
+
+---
+
 ## [v0.19219] — 2026-05-06
 
 ### Added

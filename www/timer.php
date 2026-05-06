@@ -910,6 +910,32 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
         </div>
     </div>
 </div>
+
+<!-- Save Preset As modal -->
+<div class="timer-levels-overlay" id="savePresetOverlay" onclick="if(event.target===this)closeSavePresetModal()">
+    <div class="timer-levels-panel" style="max-width:440px;position:relative">
+        <button onclick="closeSavePresetModal()" type="button"
+                style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <h3>Save Preset As</h3>
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-bottom:1rem">
+            <label style="font-size:.85rem;color:#cbd5e1">
+                Preset name
+                <input type="text" id="savePresetName" autocomplete="off"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();confirmSavePresetAs();}">
+            </label>
+            <label style="font-size:.85rem;color:#cbd5e1">
+                Save to
+                <select id="savePresetScope"
+                        style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></select>
+            </label>
+        </div>
+        <div class="timer-level-btns">
+            <button class="btn-save" type="button" onclick="confirmSavePresetAs()">Save</button>
+            <button class="btn-close-panel" type="button" onclick="closeSavePresetModal()">Cancel</button>
+        </div>
+    </div>
+</div>
 <?php endif; ?>
 
 <?php if (!$is_remote): ?>
@@ -1967,8 +1993,10 @@ function loadPreset() {
         });
 }
 
+var _savePresetLeagues = [];
+
 function savePresetAs() {
-    // First, fetch the user's manageable leagues so we can offer league scope
+    // Fetch the user's manageable leagues, then open the merged-dialog modal
     var qs = new URLSearchParams();
     qs.append('action', 'get_user_leagues');
     if (SESSION_ID) qs.append('session_id', SESSION_ID);
@@ -1976,36 +2004,62 @@ function savePresetAs() {
     fetch('/timer_dl.php?' + qs.toString())
         .then(function(r) { return r.json(); })
         .then(function(j) {
-            var leagues = (j && j.ok) ? (j.leagues || []) : [];
-            _continueSavePresetAs(leagues);
+            _savePresetLeagues = (j && j.ok) ? (j.leagues || []) : [];
+            openSavePresetModal();
         })
-        .catch(function() { _continueSavePresetAs([]); });
+        .catch(function() {
+            _savePresetLeagues = [];
+            openSavePresetModal();
+        });
 }
-function _continueSavePresetAs(leagues) {
-    var name = prompt('Preset name:');
-    if (!name) return;
+
+function openSavePresetModal() {
+    var sel = document.getElementById('savePresetScope');
+    sel.innerHTML = '';
+
+    var optPersonal = document.createElement('option');
+    optPersonal.value = 'personal';
+    optPersonal.textContent = 'Personal (only you)';
+    sel.appendChild(optPersonal);
+
+    if (IS_ADMIN) {
+        var optGlobal = document.createElement('option');
+        optGlobal.value = 'global';
+        optGlobal.textContent = 'Global (all users)';
+        sel.appendChild(optGlobal);
+    }
+    _savePresetLeagues.forEach(function(l) {
+        var opt = document.createElement('option');
+        opt.value = 'league:' + l.id;
+        opt.textContent = 'League — ' + l.name;
+        sel.appendChild(opt);
+    });
+
+    document.getElementById('savePresetName').value = '';
+    document.getElementById('savePresetOverlay').classList.add('open');
+    setTimeout(function() { document.getElementById('savePresetName').focus(); }, 30);
+}
+
+function closeSavePresetModal() {
+    document.getElementById('savePresetOverlay').classList.remove('open');
+}
+
+function confirmSavePresetAs() {
+    var name = (document.getElementById('savePresetName').value || '').trim();
+    if (!name) {
+        alert('Please enter a preset name.');
+        document.getElementById('savePresetName').focus();
+        return;
+    }
+    var scopeVal = document.getElementById('savePresetScope').value;
     var is_global = 0;
     var league_id = 0;
-
-    // Build the scope picker. Options: Personal, (Admin) Global, (Leagues they manage) League: Name
-    var scopeOptions = ['0: Personal (only you)'];
-    if (IS_ADMIN) scopeOptions.push('G: Global (all users)');
-    leagues.forEach(function(l, idx) {
-        scopeOptions.push((idx + 1) + ': League — ' + l.name);
-    });
-    if (scopeOptions.length > 1) {
-        var picked = prompt('Save as:\n\n' + scopeOptions.join('\n') + '\n\nEnter your choice (0, G, or 1-' + leagues.length + '):', '0');
-        if (picked === null) return;
-        picked = String(picked).trim().toUpperCase();
-        if (picked === 'G' && IS_ADMIN) {
-            is_global = 1;
-        } else {
-            var n = parseInt(picked, 10);
-            if (!isNaN(n) && n >= 1 && n <= leagues.length) {
-                league_id = parseInt(leagues[n - 1].id, 10);
-            }
-        }
+    if (scopeVal === 'global') {
+        is_global = 1;
+    } else if (scopeVal && scopeVal.indexOf('league:') === 0) {
+        league_id = parseInt(scopeVal.slice(7), 10) || 0;
     }
+    // 'personal' leaves both at 0
 
     collectLevelsFromTable();
     for (var i = 0; i < LEVELS.length; i++) LEVELS[i].level_number = i + 1;
@@ -2021,6 +2075,7 @@ function _continueSavePresetAs(leagues) {
         .then(function(j) {
             if (j.ok) {
                 var label = is_global ? ' (global)' : (league_id ? ' (league)' : '');
+                closeSavePresetModal();
                 alert('Preset saved' + label + '!');
                 loadPresetList();
             } else {
