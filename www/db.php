@@ -495,6 +495,15 @@ function db_init(PDO $pdo): void {
     // Track which verification method the user chose at registration
     try { $pdo->exec("ALTER TABLE users ADD COLUMN verification_method TEXT NOT NULL DEFAULT 'email'"); } catch (Exception $e) {}
 
+    // Subscription tier scaffolding. Values: 'Free', 'Personal', 'League', 'OriginalSupporters'.
+    // tier_source examples: 'manual', 'stripe', 'comp', 'os_backfill'. NULL on Free defaults.
+    // tier_granted_by = admin user id when set via the admin UI, NULL for self-paid.
+    // tier_expires_at = NULL means never expires (Free, OS, manual grants).
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN tier TEXT NOT NULL DEFAULT 'Free'"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN tier_expires_at DATETIME"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN tier_source TEXT"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN tier_granted_by INTEGER"); } catch (Exception $e) {}
+
     // ─── Leagues ───────────────────────────────────────────────
     try { $pdo->exec("CREATE TABLE IF NOT EXISTS leagues (
         id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1577,6 +1586,30 @@ function league_role(int $league_id, int $user_id): ?string {
     $stmt->execute([$league_id, $user_id]);
     $r = $stmt->fetchColumn();
     return $r !== false ? $r : null;
+}
+
+// ── Subscription tier helpers ─────────────────────────────────────
+const TIER_RANK = ['Free' => 0, 'Personal' => 1, 'League' => 2, 'OriginalSupporters' => 3];
+const TIER_VALID = ['Free', 'Personal', 'League', 'OriginalSupporters'];
+const TIER_LABELS = [
+    'Free'               => 'Free',
+    'Personal'           => 'Personal',
+    'League'             => 'League',
+    'OriginalSupporters' => 'Original Supporters',
+];
+
+function tier_rank(?string $tier): int {
+    return TIER_RANK[$tier ?? 'Free'] ?? 0;
+}
+
+function tier_at_least($user_or_tier, string $required): bool {
+    $tier = is_array($user_or_tier) ? ($user_or_tier['tier'] ?? 'Free') : ($user_or_tier ?? 'Free');
+    // OriginalSupporters is honorary — normalized to League for gating, so OS users
+    // pass every Personal/League gate. To gate something to OS-ONLY, compare the raw
+    // tier directly (e.g. $user['tier'] === 'OriginalSupporters'); tier_at_least with
+    // 'OriginalSupporters' as $required will return false even for OS users.
+    if ($tier === 'OriginalSupporters') $tier = 'League';
+    return tier_rank($tier) >= tier_rank($required);
 }
 
 /**

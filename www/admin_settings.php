@@ -266,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $id    = (int)($_POST['id'] ?? 0);
             $field = $_POST['field'] ?? '';
             $value = trim($_POST['value'] ?? '');
-            $allowed_fields = ['username', 'email', 'phone', 'role', 'preferred_contact', 'notes'];
+            $allowed_fields = ['username', 'email', 'phone', 'role', 'tier', 'preferred_contact', 'notes'];
             if ($id > 0 && in_array($field, $allowed_fields, true)) {
                 if ($field === 'role') {
                     if (!in_array($value, ['admin', 'user'], true)) {
@@ -282,6 +282,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             if ($adminCount <= 1) { http_response_code(409); exit('last_admin'); }
                         }
                     }
+                }
+                if ($field === 'tier') {
+                    if (!in_array($value, TIER_VALID, true)) {
+                        http_response_code(400); exit('invalid_tier');
+                    }
+                    // Manual admin grants stamp source + grantor; do not touch tier_expires_at
+                    // (manual grants don't expire — Stripe/cron will own that field later).
+                    $db->prepare('UPDATE users SET tier = ?, tier_source = ?, tier_granted_by = ? WHERE id = ?')
+                       ->execute([$value, 'manual', (int)$current['id'], $id]);
+                    db_log_activity((int)$current['id'], "admin set user #$id tier to $value");
+                    http_response_code(200); exit;
                 }
                 if ($field === 'preferred_contact' && !in_array($value, ['email','sms','both','none'], true)) {
                     http_response_code(400); exit;
@@ -691,7 +702,7 @@ $waha_session    = get_setting('waha_session', 'default');
 // Sort column comes from ?us=, direction from ?ud=. Whitelist + col map keeps
 // user input out of the SQL string. Default: id ASC. id tiebreaker on every
 // other column so the sort is stable (no random row reordering between loads).
-$users_sort = in_array($_GET['us'] ?? '', ['id','username','email','phone','role','preferred_contact','last_login'], true)
+$users_sort = in_array($_GET['us'] ?? '', ['id','username','email','phone','role','tier','preferred_contact','last_login'], true)
     ? $_GET['us'] : 'id';
 $users_dir  = (($_GET['ud'] ?? 'asc') === 'desc') ? 'DESC' : 'ASC';
 $users_col_map = [
@@ -700,13 +711,14 @@ $users_col_map = [
     'email'             => "LOWER(COALESCE(email,''))",
     'phone'             => "COALESCE(phone,'')",
     'role'              => 'role',
+    'tier'              => "CASE tier WHEN 'Free' THEN 0 WHEN 'Personal' THEN 1 WHEN 'League' THEN 2 WHEN 'OriginalSupporters' THEN 3 ELSE 0 END",
     'preferred_contact' => 'preferred_contact',
     'last_login'        => 'last_login',
 ];
 $users_order = $users_col_map[$users_sort] . ' ' . $users_dir;
 if ($users_sort !== 'id') $users_order .= ', id ASC';
 $users = $db->query(
-    "SELECT id, username, email, phone, role, preferred_contact, notes, created_at, last_login
+    "SELECT id, username, email, phone, role, tier, preferred_contact, notes, created_at, last_login
        FROM users
        ORDER BY $users_order"
 )->fetchAll();
@@ -1491,6 +1503,7 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
                         <th style="min-width:180px"><?= ug_sort_link('email', 'Email', $users_sort, $users_dir) ?></th>
                         <th style="min-width:120px"><?= ug_sort_link('phone', 'Phone', $users_sort, $users_dir) ?></th>
                         <th style="min-width:90px"><?= ug_sort_link('role', 'Role', $users_sort, $users_dir) ?></th>
+                        <th style="min-width:130px"><?= ug_sort_link('tier', 'Tier', $users_sort, $users_dir) ?></th>
                         <th style="min-width:110px"><?= ug_sort_link('preferred_contact', 'Notification', $users_sort, $users_dir) ?></th>
                         <th style="min-width:200px">Notes</th>
                         <th style="min-width:120px"><?= ug_sort_link('last_login', 'Last Login', $users_sort, $users_dir) ?></th>
@@ -1530,6 +1543,14 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
                         </td>
 
                         <td>
+                            <select class="ug-cell-select" data-field="tier" data-id="<?= $uid ?>">
+                                <?php $cur_tier = $u['tier'] ?? 'Free'; foreach (TIER_LABELS as $tv => $tl): ?>
+                                <option value="<?= $tv ?>" <?= $cur_tier === $tv ? 'selected' : '' ?>><?= htmlspecialchars($tl) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </td>
+
+                        <td>
                             <select class="ug-cell-select" data-field="preferred_contact" data-id="<?= $uid ?>">
                                 <?php foreach (['email'=>'email','sms'=>'sms','both'=>'both','none'=>'none'] as $v=>$l): ?>
                                 <option value="<?= $v ?>" <?= ($u['preferred_contact'] ?? 'email') === $v ? 'selected' : '' ?>><?= $l ?></option>
@@ -1565,7 +1586,7 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
                     </tr>
                 <?php endforeach; ?>
                 <?php if (empty($users)): ?>
-                    <tr><td colspan="11" style="text-align:center;color:#94a3b8;padding:2rem">No users found.</td></tr>
+                    <tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:2rem">No users found.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>

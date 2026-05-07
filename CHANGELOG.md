@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19221] — 2026-05-07
+
+### Added
+- **Subscription tier scaffolding (no gating yet).** Adds the substrate for paid tiers without actually paywalling anything yet — gating decisions land per-feature in subsequent commits. Tiers are **Free** (rank 0, default), **Personal** (rank 1), **League** (rank 2), and **Original Supporters** (honorary, shares effective rank with League). Schema: four new columns on `users` — `tier TEXT NOT NULL DEFAULT 'Free'`, `tier_expires_at DATETIME` (nullable; NULL = never expires), `tier_source TEXT` (`'manual'` for admin grants; reserved for `'stripe'`/`'comp'`/`'os_backfill'` later), `tier_granted_by INTEGER` (admin user id when set via the UI). Existing rows default to `Free`. Helper functions `tier_rank()` and `tier_at_least($user_or_tier, 'Personal')` in `db.php` will own all future feature gates — Original Supporters is normalized to League rank inside the helper, so OS users automatically get any League-or-below privilege without scattering string comparisons. Admin Users grid (`/admin_settings.php#users`) gets a sortable **Tier** column with an inline 4-option dropdown; changes route through the existing `update_user` action, stamp `tier_source='manual'` and `tier_granted_by=<admin_id>`, and write to `activity_log` via `db_log_activity`. Manual grants do **not** set `tier_expires_at` — that field is reserved for billing integration. User CSV import/export format is unchanged this pass (no `tier` column added to the CSV; existing exports remain interchangeable). Original Supporters is hand-picked, not auto-backfilled — promote those users individually from the Tier dropdown.
+
+---
+
 ## [v0.19220] — 2026-05-06
 
 ### Changed
