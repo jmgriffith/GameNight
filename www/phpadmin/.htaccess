@@ -1,0 +1,16 @@
+# Gate every PHP request in this directory through GameNight's admin auth.
+# Wired via auto_prepend_file so direct hits on phpliteadmin.php (or any
+# future pla-ng URL) run through _gate.php before any pla-ng code executes.
+# Requires mod_php (provided by the php:apache base image); would not work
+# under PHP-FPM where auto_prepend_file is not settable via .htaccess.
+php_value auto_prepend_file /var/www/html/phpadmin/_gate.php
+
+# pla-ng's config exposes the DB path; no need to serve it directly.
+<Files "phpliteadmin.config.php">
+    Require all denied
+</Files>
+
+# The gate is a partial — never serve it as a page.
+<Files "_gate.php">
+    Require all denied
+</Files>

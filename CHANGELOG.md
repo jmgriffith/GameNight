@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19224] — 2026-05-07
+
+### Security
+- **phpLiteAdmin gated behind admin auth.** Direct hits on `/phpadmin/phpliteadmin.php` previously returned the pla-ng login UI to any unauthenticated visitor — and pla-ng's own auth was disabled (`$password = ''` in `phpliteadmin.config.php`) on the assumption that the `/phpadmin/index.php` redirect was the gate. The redirect only protected `/phpadmin/`, not the file directly, so the SQLite admin tool was effectively reachable without login. Fixed by adding `www/phpadmin/.htaccess` with a `php_value auto_prepend_file` directive that runs `_gate.php` before any PHP request in the directory; the gate redirects non-admins to `/login.php` with a return URL. The same `.htaccess` adds `<Files>` deny rules on `phpliteadmin.config.php` and `_gate.php` so neither is fetchable directly. Works because the base image runs PHP as mod_php; would need a different approach under PHP-FPM.
+
+---
+
 ## [v0.19223] — 2026-05-07
 
 ### Added
