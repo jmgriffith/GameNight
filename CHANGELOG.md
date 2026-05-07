@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19225] — 2026-05-07
+
+### Added
+- **WordPress & API card on the landing page.** New 12th feature card on `/index.php`'s logged-out splash, advertising both the official **GameNight League** WordPress plugin (https://github.com/Isorgcom/gamenight-league-wp) and the public REST API at `/api/v1/` for non-WordPress consumers. Read-scope keys for display, write-scope keys for sign-up minting. No code path changed — copy only.
+
+---
+
 ## [v0.19224] — 2026-05-07
 
 ### Security

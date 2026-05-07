@@ -69,6 +69,11 @@
         <h3>Posts &amp; Comments</h3>
         <p>Share announcements, pin important updates, and let your group discuss. Rich-text editor, comment threads, and a pinned-post feed on the home page.</p>
     </div>
+    <div class="feature-card">
+        <div class="icon">&#128268;</div>
+        <h3>WordPress &amp; API</h3>
+        <p>Got a WordPress site for your league? Drop in our <strong>GameNight League</strong> plugin to render events, posts, roster, rules, and RSVP forms as shortcodes anywhere on your site. On a different stack? The same data is one bearer-auth REST call away — read-scope keys for display, write-scope keys let your site mint new accounts.</p>
+    </div>
 </div>
 
 <div style="text-align:center;padding:3rem 1.5rem 4rem">
