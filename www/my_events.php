@@ -127,7 +127,10 @@ function rsvp_badge(?string $rsvp, ?string $approval_status = 'approved'): strin
 
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:.75rem;margin-bottom:1.75rem">
         <h2 style="font-size:1.4rem;font-weight:700;color:#1e293b;margin:0">My Events</h2>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:#64748b">
+        <a href="/calendar.php?new=1" style="margin-left:auto;display:inline-flex;align-items:center;gap:.3rem;padding:.4rem .75rem;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-size:.85rem;font-weight:600">
+            <span style="font-size:1.1rem;line-height:1">&#43;</span> New Event
+        </a>
+        <div style="display:flex;align-items:center;gap:.5rem;font-size:.8rem;color:#64748b">
             <label>Past:
                 <select onchange="window.location='/my_events.php?past_days='+this.value" style="padding:.2rem .4rem;border:1px solid #e2e8f0;border-radius:5px;font-size:.8rem;background:#fff">
                     <?php foreach ([7=>'7d',14=>'14d',30=>'30d',60=>'60d',90=>'90d',180=>'6mo',365=>'1yr'] as $v=>$l): ?>
@@ -201,9 +204,11 @@ function rsvp_badge(?string $rsvp, ?string $approval_status = 'approved'): strin
     <?php endif; ?>
 
     <!-- Past -->
-    <h3 style="font-size:.8rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem">
-        Past &mdash; <?= count($past) ?>
-    </h3>
+    <details>
+        <summary style="cursor:pointer;list-style:none;font-size:.8rem;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.75rem;display:flex;align-items:center;gap:.4rem">
+            <span style="display:inline-block;transition:transform .15s" class="me-past-caret">&#9656;</span>
+            Past &mdash; <?= count($past) ?>
+        </summary>
 
     <?php if (empty($past)): ?>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:1.5rem;text-align:center;color:#94a3b8">
@@ -251,8 +256,14 @@ function rsvp_badge(?string $rsvp, ?string $approval_status = 'approved'): strin
         <?php endforeach; ?>
     </div>
     <?php endif; ?>
+    </details>
 
 </div>
+
+<style>
+details[open] .me-past-caret { transform: rotate(90deg); }
+details > summary::-webkit-details-marker { display: none; }
+</style>
 
 <?php require __DIR__ . '/_footer.php'; ?>
 </body>

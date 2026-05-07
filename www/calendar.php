@@ -3645,6 +3645,16 @@ function regenerateWalkinToken(ev, callback) {
     .then(function(j) { if (j.ok && j.walkin_token && typeof callback === 'function') callback(j.walkin_token); });
 }
 <?php endif; ?>
+
+// Auto-open the Add Event modal when arriving with ?new=1 (e.g. from /my_events.php).
+(function() {
+    try {
+        var p = new URLSearchParams(window.location.search);
+        if (p.get('new') === '1' && typeof openAddModal === 'function') {
+            document.addEventListener('DOMContentLoaded', function() { openAddModal(''); });
+        }
+    } catch (e) {}
+})();
 </script>
 
 </body>

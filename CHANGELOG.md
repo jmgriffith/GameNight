@@ -4,6 +4,20 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19223] — 2026-05-07
+
+### Added
+- **My Events: "+ New Event" button.** Top-right of the page header on `/my_events.php`, next to the Past range selector. Links to `/calendar.php?new=1`, which now auto-opens the Add Event modal on load via a small `URLSearchParams` check at the bottom of `calendar.php`. One click from My Events to a fresh event editor instead of the old two-step (navigate to calendar, then click "+ Add Event").
+
+---
+
+## [v0.19222] — 2026-05-07
+
+### Changed
+- **My Events: Past section is now collapsible.** The "Past — N" header on `/my_events.php` became a `<details>` disclosure with a small caret that rotates open. Past events start collapsed so the page lands on Upcoming. The "Past:" range selector at the top of the page still controls how far back the list goes. Mirrors the same pattern we use on the league events tab.
+
+---
+
 ## [v0.19221] — 2026-05-07
 
 ### Added
