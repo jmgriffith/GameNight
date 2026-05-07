@@ -1,6 +1,9 @@
 # Credentials — never commit the real config
 config/config.php
 
+# Compose env file — holds the shared WAHA_WEBHOOK_TOKEN secret
+.env
+
 # SQLite database
 db/
 

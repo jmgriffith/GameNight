@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19226] — 2026-05-07
+
+### Security
+- **WhatsApp webhook now token-gated.** `wa_webhook.php` previously accepted any POST shaped like `{event:"message", payload:{...}}`. The endpoint is reachable externally via NPM (the gamenight container is on the `npm_default` network), so an unauthenticated attacker could forge inbound "WhatsApp" messages and trigger the same write paths as a real reply: flip RSVPs, run STOP/START opt-out, advance the waitlist via forged "no" replies. Fixed by adding a token gate at the top of the file mirroring `cron.php`'s pattern. The token lives in a new gitignored `.env` file alongside `docker-compose.yml`; both `gamenight` and `waha` containers receive it as the `WAHA_WEBHOOK_TOKEN` env var, and waha's `WHATSAPP_HOOK_URL` interpolates it as a `?token=` query string. **Operator note:** create `.env` with `WAHA_WEBHOOK_TOKEN=$(openssl rand -hex 32)` before `docker compose up -d`, otherwise the gate fails closed and inbound WhatsApp replies stop working until the token is set on both sides.
+
+---
+
 ## [v0.19225] — 2026-05-07
 
 ### Added

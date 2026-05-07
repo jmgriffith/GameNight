@@ -3,7 +3,13 @@
  * WhatsApp inbound webhook — handles RSVP replies from users via WhatsApp.
  *
  * Receives messages from WAHA (self-hosted WhatsApp HTTP API).
- * Configure WAHA env: WHATSAPP_HOOK_URL=http://gamenight/wa_webhook.php
+ * Configure WAHA env: WHATSAPP_HOOK_URL=http://gamenight/wa_webhook.php?token=$WAHA_WEBHOOK_TOKEN
+ *
+ * The token gate matches the pattern used by cron.php — without it, the
+ * endpoint is reachable externally via NPM and an attacker can forge inbound
+ * "WhatsApp" messages (RSVPs, STOP/START, waitlist promotions). The token
+ * lives in the .env file alongside docker-compose.yml; both gamenight and
+ * waha containers receive it as an env var.
  *
  * Supported reply keywords: YES, NO, MAYBE
  */
@@ -13,6 +19,15 @@ require_once __DIR__ . '/sms.php';
 // Only accept POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
+    exit;
+}
+
+// ── Token gate ───────────────────────────────────────────────────────────────
+// Mirrors cron.php — fail closed if the token isn't configured or doesn't match.
+$expected_token = (string) (getenv('WAHA_WEBHOOK_TOKEN') ?: '');
+$provided_token = (string) ($_GET['token'] ?? '');
+if ($expected_token === '' || $provided_token === '' || !hash_equals($expected_token, $provided_token)) {
+    http_response_code(403);
     exit;
 }
 
