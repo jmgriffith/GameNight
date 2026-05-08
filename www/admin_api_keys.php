@@ -31,10 +31,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (($_POST['action'] ?? '') === 'revoke') {
         $id = (int)($_POST['id'] ?? 0);
         if ($id > 0) {
-            $db->prepare('UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND revoked_at IS NULL')
-               ->execute([$id]);
-            db_log_activity((int)$current['id'], "admin revoked API key id=$id");
-            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'API key revoked.'];
+            $db->prepare('DELETE FROM api_keys WHERE id = ?')->execute([$id]);
+            db_log_activity((int)$current['id'], "admin deleted API key id=$id");
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'API key deleted.'];
         }
         header('Location: /admin_api_keys.php');
         exit;
@@ -42,11 +41,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $keys = $db->query(
-    "SELECT k.id, k.label, k.league_id, k.created_at, k.last_used_at, k.revoked_at,
+    "SELECT k.id, k.label, k.league_id, k.created_at, k.last_used_at,
             l.name AS league_name
      FROM api_keys k
      LEFT JOIN leagues l ON l.id = k.league_id
-     ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC"
+     WHERE k.revoked_at IS NULL
+     ORDER BY k.created_at DESC"
 )->fetchAll();
 
 $local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
@@ -71,14 +71,10 @@ function api_keys_admin_fmt(?string $utc_dt, DateTimeZone $local_tz): string {
         .ak-table { width:100%; border-collapse:collapse; font-size:.875rem; }
         .ak-table th, .ak-table td { padding:.55rem .6rem; border-bottom:1px solid #f1f5f9; text-align:left; }
         .ak-table th { font-size:.7rem; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; font-weight:700; }
-        .ak-pill { display:inline-block; font-size:.7rem; font-weight:700; padding:.1rem .5rem; border-radius:999px; }
-        .ak-pill.active { background:#dcfce7; color:#166534; }
-        .ak-pill.revoked { background:#fee2e2; color:#991b1b; }
         .ak-btn { background:#dc2626; color:#fff; border:none; border-radius:6px; padding:.3rem .8rem; font-size:.78rem; font-weight:600; cursor:pointer; }
         .ak-flash { border:1.5px solid; border-radius:10px; padding:1rem 1.25rem; margin-bottom:1rem; font-size:.9rem; }
         .ak-flash.success { background:#f0fdf4; border-color:#86efac; color:#166534; }
         .ak-flash.error   { background:#fef2f2; border-color:#fca5a5; color:#991b1b; }
-        .ak-revoked-row { opacity:.55; }
     </style>
 </head>
 <body>
@@ -106,15 +102,14 @@ function api_keys_admin_fmt(?string $utc_dt, DateTimeZone $local_tz): string {
                 <tr>
                     <th>Label</th>
                     <th>League</th>
-                    <th>Status</th>
                     <th>Created</th>
                     <th>Last used</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($keys as $k): $revoked = !empty($k['revoked_at']); ?>
-                <tr<?= $revoked ? ' class="ak-revoked-row"' : '' ?>>
+                <?php foreach ($keys as $k): ?>
+                <tr>
                     <td><?= htmlspecialchars($k['label']) ?></td>
                     <td>
                         <?php if (!empty($k['league_name'])): ?>
@@ -123,24 +118,15 @@ function api_keys_admin_fmt(?string $utc_dt, DateTimeZone $local_tz): string {
                             <span style="color:#94a3b8">league <?= (int)$k['league_id'] ?></span>
                         <?php endif; ?>
                     </td>
-                    <td>
-                        <?php if ($revoked): ?>
-                            <span class="ak-pill revoked">Revoked</span>
-                        <?php else: ?>
-                            <span class="ak-pill active">Active</span>
-                        <?php endif; ?>
-                    </td>
                     <td><?= htmlspecialchars(api_keys_admin_fmt($k['created_at'], $local_tz)) ?></td>
                     <td><?= htmlspecialchars(api_keys_admin_fmt($k['last_used_at'], $local_tz)) ?></td>
                     <td style="text-align:right">
-                        <?php if (!$revoked): ?>
-                        <form method="post" style="margin:0;display:inline" onsubmit="return confirm('Revoke this API key? Consumers using it will start getting 401 immediately.')">
+                        <form method="post" style="margin:0;display:inline" onsubmit="return confirm('Delete this API key permanently? Consumers using it will start getting 401 immediately and this can't be undone.')">
                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
                             <input type="hidden" name="action" value="revoke">
                             <input type="hidden" name="id" value="<?= (int)$k['id'] ?>">
                             <button type="submit" class="ak-btn">Revoke</button>
                         </form>
-                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>

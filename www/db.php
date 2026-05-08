@@ -578,6 +578,15 @@ function db_init(PDO $pdo): void {
     // adding write endpoints (e.g. POST /api/v1/users) cannot be exercised by an old
     // sister-site key without an explicit re-mint.
     try { $pdo->exec("ALTER TABLE api_keys ADD COLUMN scopes TEXT NOT NULL DEFAULT 'read'"); } catch (Exception $e) {}
+    // One-shot: prune any pre-existing revoked api_keys rows. Revoke now hard-deletes,
+    // so legacy soft-revoked rows would just sit invisible forever. Guarded by a
+    // site_setting flag so it runs once and then no-ops on every db_init thereafter.
+    try {
+        if (get_setting('api_keys_revoked_pruned', '') !== '1') {
+            $pdo->exec('DELETE FROM api_keys WHERE revoked_at IS NOT NULL');
+            set_setting('api_keys_revoked_pruned', '1');
+        }
+    } catch (Exception $e) {}
 
     // Event visibility + league linkage
     try { $pdo->exec("ALTER TABLE events ADD COLUMN league_id  INTEGER"); } catch (Exception $e) {}

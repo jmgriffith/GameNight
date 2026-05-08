@@ -8,7 +8,8 @@
  *
  * Actions:
  *   create — owner/admin: mint a new 64-char hex key, return plaintext exactly once
- *   revoke — owner/admin: soft-revoke (sets revoked_at) so audit logs survive
+ *   revoke — owner/admin: hard-delete the row; api_request_log keeps the integer
+ *            key_id as an orphan reference for forensics, activity_log records the act
  *
  * Plaintext is returned in the JSON response (and via a flash message on the
  * redirect path) so the caller can display it once and never store it.
@@ -105,22 +106,21 @@ switch ($action) {
         $key_id = (int)($_POST['key_id'] ?? 0);
         if ($key_id <= 0) ak_fail('key_id required');
 
-        $stmt = $db->prepare('SELECT id, league_id, revoked_at FROM api_keys WHERE id = ?');
+        $stmt = $db->prepare('SELECT id, league_id FROM api_keys WHERE id = ?');
         $stmt->execute([$key_id]);
         $row = $stmt->fetch();
         if (!$row) ak_fail('Key not found', 404);
-        if ($row['revoked_at']) ak_fail('Already revoked', 400);
 
         if (!user_can_manage_league_api_keys($db, (int)$row['league_id'], $uid, $isAdmin)) {
             ak_fail('Not allowed', 403);
         }
 
-        $db->prepare('UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP WHERE id = ?')
+        $db->prepare('DELETE FROM api_keys WHERE id = ?')
            ->execute([$key_id]);
-        db_log_activity($uid, "revoked API key id=$key_id league=" . (int)$row['league_id']);
+        db_log_activity($uid, "deleted API key id=$key_id league=" . (int)$row['league_id']);
 
         if (!$__is_json) {
-            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'API key revoked.'];
+            $_SESSION['flash'] = ['type' => 'success', 'msg' => 'API key deleted.'];
         }
         ak_ok();
     }

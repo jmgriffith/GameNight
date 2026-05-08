@@ -1154,10 +1154,10 @@ function ordinal($n) {
     <?php elseif ($tab === 'api' && $isOwner): ?>
         <?php
         $akStmt = $db->prepare(
-            "SELECT id, label, created_at, last_used_at, revoked_at, scopes
+            "SELECT id, label, created_at, last_used_at, scopes
                FROM api_keys
-              WHERE league_id = ?
-              ORDER BY revoked_at IS NOT NULL, created_at DESC"
+              WHERE league_id = ? AND revoked_at IS NULL
+              ORDER BY created_at DESC"
         );
         $akStmt->execute([$league_id]);
         $api_keys = $akStmt->fetchAll();
@@ -1207,15 +1207,14 @@ function ordinal($n) {
                     <tr style="text-align:left">
                         <th style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">Label</th>
                         <th style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">Scope</th>
-                        <th style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">Status</th>
                         <th style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">Created</th>
                         <th style="font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">Last used</th>
                         <th style="border-bottom:1px solid #f1f5f9"></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($api_keys as $k): $revoked = !empty($k['revoked_at']); $hasWrite = strpos((string)($k['scopes'] ?? 'read'), 'write') !== false; ?>
-                    <tr style="<?= $revoked ? 'opacity:.55' : '' ?>">
+                    <?php foreach ($api_keys as $k): $hasWrite = strpos((string)($k['scopes'] ?? 'read'), 'write') !== false; ?>
+                    <tr>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9"><?= htmlspecialchars($k['label']) ?></td>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">
                             <?php if ($hasWrite): ?>
@@ -1224,25 +1223,16 @@ function ordinal($n) {
                                 <span title="Read-only" style="display:inline-block;font-size:.7rem;font-weight:700;padding:.1rem .5rem;border-radius:999px;background:#e0e7ff;color:#3730a3">read</span>
                             <?php endif; ?>
                         </td>
-                        <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9">
-                            <?php if ($revoked): ?>
-                                <span style="display:inline-block;font-size:.7rem;font-weight:700;padding:.1rem .5rem;border-radius:999px;background:#fee2e2;color:#991b1b">Revoked</span>
-                            <?php else: ?>
-                                <span style="display:inline-block;font-size:.7rem;font-weight:700;padding:.1rem .5rem;border-radius:999px;background:#dcfce7;color:#166534">Active</span>
-                            <?php endif; ?>
-                        </td>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9"><?= htmlspecialchars($ak_fmt($k['created_at'])) ?></td>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9"><?= htmlspecialchars($ak_fmt($k['last_used_at'])) ?></td>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9;text-align:right">
-                            <?php if (!$revoked): ?>
-                            <form method="post" action="/league_api_keys_dl.php" style="margin:0;display:inline" onsubmit="return confirm('Revoke this API key? Consumers using it will start getting 401 immediately.')">
+                            <form method="post" action="/league_api_keys_dl.php" style="margin:0;display:inline" onsubmit="return confirm('Delete this API key permanently? Consumers using it will start getting 401 immediately and this can&apos;t be undone.')">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
                                 <input type="hidden" name="action" value="revoke">
                                 <input type="hidden" name="key_id" value="<?= (int)$k['id'] ?>">
                                 <input type="hidden" name="redirect" value="/league.php?id=<?= $league_id ?>&tab=api">
                                 <button type="submit" class="lg-btn lg-btn-ghost" style="font-size:.78rem;padding:.3rem .8rem;color:#dc2626">Revoke</button>
                             </form>
-                            <?php endif; ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
