@@ -100,6 +100,9 @@ if ($queue_sent > 0 || $queue_failed > 0) {
 
 // Prune old pending_notifications older than 7 days (either sent successfully or maxed out retries)
 try { $db->exec("DELETE FROM pending_notifications WHERE attempted_at < datetime('now', '-7 days')"); } catch (Exception $e) {}
+// Safety-net: rows pointing at deleted events. delete_events() cascades, but events
+// can also disappear via other paths, leaving zombie reminders/cancellations queued.
+try { $db->exec("DELETE FROM pending_notifications WHERE event_id NOT IN (SELECT id FROM events)"); } catch (Exception $e) {}
 
 // ── 3. RSVP deadline processor: demote non-responders, promote waitlisters ─────
 $deadline_processed = 0;
