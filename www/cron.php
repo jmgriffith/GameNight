@@ -8,8 +8,8 @@
  * 3. RSVP deadline processor — demote non-responders, promote waitlisters.
  * 4. Prune stale auxiliary tables.
  *
- * Recommended cron schedule (every 5 minutes):
- *   */5 * * * *  curl -s "https://yourdomain.com/cron.php?token=YOUR_CRON_TOKEN" > /dev/null
+ * Recommended cron schedule: every 5 minutes, fetch
+ * https://yourdomain.com/cron.php?token=YOUR_CRON_TOKEN with curl.
  *
  * Protected by cron_token in site_settings.
  */
