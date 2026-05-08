@@ -74,6 +74,25 @@ function api_authenticate(): array {
         api_fail('Invalid or revoked API key', 401);
     }
 
+    // Per-key rate limit. A buggy AI bot crawl on a sister site once hammered
+    // /api/v1/events at ~3.5 req/s, which starved SQLite write-locks and silently
+    // dropped notifications elsewhere on the server. Cap covers read+write paths.
+    // Override with API_RATE_LIMIT_PER_MINUTE in config.php if needed.
+    $rate_max = defined('API_RATE_LIMIT_PER_MINUTE') ? (int)API_RATE_LIMIT_PER_MINUTE : 120;
+    if ($rate_max > 0) {
+        try {
+            $cutoff = gmdate('Y-m-d H:i:s', time() - 60);
+            $cs = $db->prepare('SELECT COUNT(*) FROM api_request_log WHERE key_id = ? AND created_at >= ?');
+            $cs->execute([(int)$row['id'], $cutoff]);
+            $recent = (int)$cs->fetchColumn();
+            if ($recent >= $rate_max) {
+                api_log_request((int)$row['id'], 429);
+                header('Retry-After: 30');
+                api_fail("Rate limit exceeded ({$rate_max}/min). Slow down and try again shortly.", 429);
+            }
+        } catch (Exception $e) { /* non-fatal: never let a counter glitch lock out a real client */ }
+    }
+
     // Record use. last_used_at also tells admins which keys are dormant.
     try {
         $db->prepare('UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE id = ?')
