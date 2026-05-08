@@ -120,7 +120,6 @@ function surge_send_verification(string $phone): array {
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($curlErr) return ['error' => 'Connection error: ' . $curlErr];
     $json = json_decode($response, true);
@@ -151,7 +150,6 @@ function surge_check_verification(string $id, string $code): string {
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
 
     if ($curlErr) return 'Connection error: ' . $curlErr;
     $json = json_decode($response, true);
@@ -193,7 +191,6 @@ function shorten_url(string $url): string {
         ]);
         $resp   = curl_exec($ch);
         $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
         if ($status >= 200 && $status < 300) {
             $data  = json_decode($resp, true);
@@ -324,7 +321,6 @@ function send_whatsapp(string $to, string $body): ?string {
     $response = curl_exec($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $curlErr  = curl_error($ch);
-    curl_close($ch);
 
     $err = null;
     if ($curlErr) {
@@ -353,7 +349,6 @@ function _sms_twilio(string $sid, string $token, string $from, string $to, strin
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     $raw = $response ?: '';
     if ($curlErr) return 'Connection error: ' . $curlErr;
     if ($code === 201) return null;
@@ -375,7 +370,6 @@ function _sms_plivo(string $authId, string $authToken, string $from, string $to,
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     $raw = $response ?: '';
     if ($curlErr) return 'Connection error: ' . $curlErr;
     if ($code >= 200 && $code < 300) return null;
@@ -398,7 +392,6 @@ function _sms_telnyx(string $apiKey, string $from, string $to, string $body, str
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     $raw = $response ?: '';
     if ($curlErr) return 'Connection error: ' . $curlErr;
     if ($code >= 200 && $code < 300) return null;
@@ -425,7 +418,6 @@ function _sms_surge(string $accountId, string $apiKey, string $from, string $to,
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     $raw = $response ?: '';
     if ($curlErr) return 'Connection error: ' . $curlErr;
     if ($code >= 200 && $code < 300) return null;
@@ -450,7 +442,6 @@ function _sms_vonage(string $apiKey, string $apiSecret, string $from, string $to
     $response = curl_exec($ch);
     $curlErr  = curl_error($ch);
     $code     = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     $raw = $response ?: '';
     if ($curlErr) return 'Connection error: ' . $curlErr;
     if ($code !== 200) return "HTTP $code";

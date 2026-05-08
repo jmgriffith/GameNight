@@ -65,6 +65,10 @@ function get_db(): PDO {
         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
         $pdo->exec('PRAGMA journal_mode=WAL');
+        // Wait up to 5s on lock contention before returning SQLITE_BUSY. Without this,
+        // concurrent writers (web request + forked cron_drain.php + scheduled cron tick)
+        // race and immediately fail with "database is locked", silently dropping notifications.
+        $pdo->exec('PRAGMA busy_timeout = 5000');
         db_init($pdo);
         // Apply stored timezone immediately so all date() calls use it
         $tz = $pdo->query("SELECT value FROM site_settings WHERE key='timezone'")->fetchColumn();
