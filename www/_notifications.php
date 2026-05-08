@@ -108,7 +108,20 @@ function queue_event_notification(
         $payload !== null ? json_encode($payload) : null,
         $scheduled_for,
     ]);
-    drain_queue_async();
+    _schedule_drain_at_shutdown();
+}
+
+/**
+ * Idempotently register a single drain to fire after the response is sent.
+ * Without this, a fan-out (e.g. 13 cancellation invitees on event delete)
+ * would shell_exec() one cron_drain.php per row, spawning that many
+ * concurrent PHP+SMTP processes and noticeably slowing the server.
+ */
+function _schedule_drain_at_shutdown(): void {
+    static $registered = false;
+    if ($registered) return;
+    $registered = true;
+    register_shutdown_function('drain_queue_async');
 }
 
 /**
