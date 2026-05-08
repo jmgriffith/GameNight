@@ -1226,7 +1226,7 @@ function ordinal($n) {
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9"><?= htmlspecialchars($ak_fmt($k['created_at'])) ?></td>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9"><?= htmlspecialchars($ak_fmt($k['last_used_at'])) ?></td>
                         <td style="padding:.55rem .6rem;border-bottom:1px solid #f1f5f9;text-align:right">
-                            <form method="post" action="/league_api_keys_dl.php" style="margin:0;display:inline" onsubmit="return confirm('Delete this API key permanently? Consumers using it will start getting 401 immediately and this can&apos;t be undone.')">
+                            <form method="post" action="/league_api_keys_dl.php" style="margin:0;display:inline" onsubmit="return confirm('Delete this API key permanently? Consumers using it will start getting 401 immediately. This cannot be undone.')">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
                                 <input type="hidden" name="action" value="revoke">
                                 <input type="hidden" name="key_id" value="<?= (int)$k['id'] ?>">
