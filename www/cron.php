@@ -168,7 +168,24 @@ $pruned += $db->exec("DELETE FROM event_notifications_sent WHERE created_at < da
 $pruned += $db->exec("DELETE FROM sms_log WHERE created_at < datetime('now', '-90 days')");
 $pruned += $db->exec("DELETE FROM activity_log WHERE created_at < datetime('now', '-90 days')");
 
+// API request log: older than 30 days. Dominant table by row count (~28k/day);
+// rate limiting only needs the last minute, so 30d is purely forensic headroom.
+$pruned += $db->exec("DELETE FROM api_request_log WHERE created_at < datetime('now', '-30 days')");
+
 // Short links: older than 90 days
 $pruned += $db->exec("DELETE FROM short_links WHERE created_at < datetime('now', '-90 days')");
+
+// Weekly VACUUM so deleted pages actually return to the OS. SQLite VACUUM rewrites
+// the whole file, so we gate it to once per week via a site_settings timestamp.
+try {
+    $last_vacuum = (int)get_setting('last_vacuum_ts', '0');
+    if (time() - $last_vacuum > 7 * 86400) {
+        $db->exec('VACUUM');
+        set_setting('last_vacuum_ts', (string)time());
+        echo "Vacuumed.\n";
+    }
+} catch (Exception $e) {
+    error_log('cron vacuum failed: ' . $e->getMessage());
+}
 
 echo "OK: done.\n";
