@@ -69,6 +69,9 @@ $_accent        = get_setting('accent_color', '');
                         <?php endif; ?>
                         <a href="/timer.php" class="nav-mobile-link">Tournament Timer</a>
                         <div class="nav-mobile-divider"></div>
+                        <a href="/help-hosts.php">Host Guide</a>
+                        <a href="/help-guests.php">Guest Guide</a>
+                        <div class="nav-mobile-divider"></div>
                         <a href="/settings.php"<?= $_active === 'settings' ? ' class="active"' : '' ?>>My Settings</a>
                         <a href="/logout.php" class="nav-dropdown-signout">Sign out</a>
                     </div>
@@ -81,6 +84,9 @@ $_accent        = get_setting('accent_color', '');
                         <a href="/timer.php" class="nav-mobile-link">Tournament Timer</a>
                         <div class="nav-mobile-divider"></div>
                         <?php endif; ?>
+                        <a href="/help-hosts.php">Host Guide</a>
+                        <a href="/help-guests.php">Guest Guide</a>
+                        <div class="nav-mobile-divider"></div>
                         <?php if (get_setting('allow_registration', '1') === '1'): ?>
                         <a href="/register.php">Sign Up</a>
                         <?php endif; ?>

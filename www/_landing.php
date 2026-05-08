@@ -76,6 +76,23 @@
     </div>
 </div>
 
+<div style="text-align:center;padding:2rem 1.5rem .5rem">
+    <h2 style="font-size:1.6rem;margin-bottom:.5rem">How it works</h2>
+    <p style="color:#64748b;margin-bottom:1.5rem">New here? Pick the guide that fits.</p>
+</div>
+<div class="feature-grid" style="max-width:760px;margin:0 auto">
+    <a href="/help-hosts.php" class="feature-card" style="text-decoration:none;color:inherit;display:block">
+        <div class="icon">&#127922;</div>
+        <h3>Hosting a game night?</h3>
+        <p>Quick-start guide for hosts: build your league, schedule an event, invite people, and run game night. About a ten-minute read.</p>
+    </a>
+    <a href="/help-guests.php" class="feature-card" style="text-decoration:none;color:inherit;display:block">
+        <div class="icon">&#128231;</div>
+        <h3>Got an invite?</h3>
+        <p>Quick-start guide for guests: how RSVP links work, walk-in QR codes, and what you get with a free account.</p>
+    </a>
+</div>
+
 <div style="text-align:center;padding:3rem 1.5rem 4rem">
     <p style="color:#64748b;font-size:1rem;margin-bottom:1.5rem">Ready to level up your game nights?</p>
     <div class="cta-group">
