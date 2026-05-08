@@ -161,8 +161,10 @@ $pruned += $db->exec("DELETE FROM password_resets WHERE used = 1 OR expires_at <
 $pruned += $db->exec("DELETE FROM email_verifications WHERE used = 1 OR expires_at < datetime('now', '-1 day')");
 $pruned += $db->exec("DELETE FROM phone_verifications WHERE used = 1 OR expires_at < datetime('now', '-1 day')");
 
-// Notification dedup: older than 30 days
-$pruned += $db->exec("DELETE FROM event_notifications_sent WHERE created_at < datetime('now', '-30 days')");
+// Notification dedup: older than 30 days, plus rows for deleted events.
+// (Column is sent_at, not created_at — earlier version had this wrong and silently pruned nothing.)
+$pruned += $db->exec("DELETE FROM event_notifications_sent WHERE sent_at < datetime('now', '-30 days')");
+$pruned += $db->exec("DELETE FROM event_notifications_sent WHERE event_id NOT IN (SELECT id FROM events)");
 
 // Logs: older than 90 days
 $pruned += $db->exec("DELETE FROM sms_log WHERE created_at < datetime('now', '-90 days')");
