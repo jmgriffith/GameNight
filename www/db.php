@@ -69,6 +69,11 @@ function get_db(): PDO {
         // concurrent writers (web request + forked cron_drain.php + scheduled cron tick)
         // race and immediately fail with "database is locked", silently dropping notifications.
         $pdo->exec('PRAGMA busy_timeout = 5000');
+        // Enforce FK constraints. SQLite defaults to OFF for backwards compat, which made
+        // every ON DELETE CASCADE in the schema decorative — orphans accumulated across
+        // poker_sessions, blind_preset_levels, timer_state, etc. db_init() runs a one-shot
+        // cleanup the first time it sees this PRAGMA enabled.
+        $pdo->exec('PRAGMA foreign_keys = ON');
         db_init($pdo);
         // Apply stored timezone immediately so all date() calls use it
         $tz = $pdo->query("SELECT value FROM site_settings WHERE key='timezone'")->fetchColumn();
@@ -588,6 +593,32 @@ function db_init(PDO $pdo): void {
         }
     } catch (Exception $e) {}
 
+    // One-shot: clean FK orphans accumulated while SQLite FK enforcement was off.
+    // From this commit on, get_db() sets PRAGMA foreign_keys = ON, but existing
+    // orphans need to be cleared once. Order matters: clean leaves before parents
+    // so cascades don't fight us.
+    try {
+        if (get_setting('fk_orphan_cleanup_v1', '') !== '1') {
+            // Dead blind preset levels (114 on prod at deploy time)
+            $pdo->exec('DELETE FROM blind_preset_levels WHERE preset_id NOT IN (SELECT id FROM blind_presets)');
+            // timer_state with dead preset → null out (FK declares ON DELETE SET NULL anyway)
+            $pdo->exec('UPDATE timer_state SET preset_id = NULL WHERE preset_id IS NOT NULL AND preset_id NOT IN (SELECT id FROM blind_presets)');
+            // timer_state with dead session → delete (FK declares ON DELETE CASCADE)
+            $pdo->exec('DELETE FROM timer_state WHERE session_id NOT IN (SELECT id FROM poker_sessions)');
+            // Dead poker_sessions → delete (cascades into players/payouts/timer_state)
+            $pdo->exec('DELETE FROM poker_sessions WHERE event_id NOT IN (SELECT id FROM events)');
+            // poker_players pointing at deleted users → null the FK, keep history (display_name + removed)
+            $pdo->exec('UPDATE poker_players SET user_id = NULL, removed = 1 WHERE user_id IS NOT NULL AND user_id NOT IN (SELECT id FROM users)');
+            // activity_log: NOT NULL FK to users; only option is delete (rows would be 90d-pruned anyway)
+            $pdo->exec('DELETE FROM activity_log WHERE user_id NOT IN (SELECT id FROM users)');
+            // user_session_defaults pointing at dead users or leagues
+            $pdo->exec('DELETE FROM user_session_defaults WHERE user_id NOT IN (SELECT id FROM users) OR league_id NOT IN (SELECT id FROM leagues)');
+            set_setting('fk_orphan_cleanup_v1', '1');
+        }
+    } catch (Exception $e) {
+        error_log('fk_orphan_cleanup_v1 failed: ' . $e->getMessage());
+    }
+
     // Event visibility + league linkage
     try { $pdo->exec("ALTER TABLE events ADD COLUMN league_id  INTEGER"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'invitees_only'"); } catch (Exception $e) {}
@@ -1019,7 +1050,28 @@ function delete_user_account(int $user_id): void {
         // Notification dedup log keyed on username — clear so re-adding the name as a custom invitee fires fresh SMS/email.
         try { $db->prepare('DELETE FROM event_notifications_sent WHERE LOWER(user_identifier) = LOWER(?)')->execute([$username]); } catch (Exception $e) {}
     }
-    $db->prepare('UPDATE poker_players SET removed = 1 WHERE user_id = ?')->execute([$user_id]);
+    // NULL the user_id while preserving roster history (display_name + removed flag).
+    // user_id stayed pointing at a now-dead user before; with FK enforcement on, that
+    // would block the user delete.
+    $db->prepare('UPDATE poker_players SET user_id = NULL, removed = 1 WHERE user_id = ?')->execute([$user_id]);
+    // activity_log.user_id is NOT NULL with a FK; delete this user's audit rows (the 90d
+    // cron prune would erase them eventually anyway).
+    try { $db->prepare('DELETE FROM activity_log WHERE user_id = ?')->execute([$user_id]); } catch (Exception $e) {}
+    // Reassign events created by this user to a fallback admin so the FK stays valid and
+    // shared event history is preserved. If no other admin exists, the delete is refused.
+    try {
+        $hasEvents = $db->prepare('SELECT COUNT(*) FROM events WHERE created_by = ?');
+        $hasEvents->execute([$user_id]);
+        if ((int)$hasEvents->fetchColumn() > 0) {
+            $fallback = $db->prepare("SELECT id FROM users WHERE role='admin' AND id <> ? ORDER BY id LIMIT 1");
+            $fallback->execute([$user_id]);
+            $fallback_id = $fallback->fetchColumn();
+            if (!$fallback_id) {
+                throw new RuntimeException('Cannot delete user: they own events and there is no other admin to reassign to.');
+            }
+            $db->prepare('UPDATE events SET created_by = ? WHERE created_by = ?')->execute([(int)$fallback_id, $user_id]);
+        }
+    } catch (RuntimeException $e) { throw $e; } catch (Exception $e) {}
     // Preserve league/global posts authored by this user; null out the author pointer instead of deleting.
     try { $db->prepare('UPDATE posts SET author_id = NULL WHERE author_id = ?')->execute([$user_id]); } catch (Exception $e) {}
     $db->prepare('DELETE FROM comments WHERE user_id = ?')->execute([$user_id]);
