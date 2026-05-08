@@ -676,6 +676,7 @@ $log_rows  = $db->prepare("
 ");
 $log_rows->execute([$per_page, $offset]);
 $log_rows = $log_rows->fetchAll();
+$smsLogCount = (int)$db->query('SELECT COUNT(*) FROM sms_log')->fetchColumn();
 
 $site_name    = get_setting('site_name', 'Game Night');
 $timezone     = get_setting('timezone', 'UTC');
@@ -1362,14 +1363,19 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
             <p style="color:#64748b;font-size:.875rem;margin:0">
                 All user activity &mdash; <?= number_format($log_total) ?> total entries.
             </p>
-            <form method="post" action="/admin_settings.php"
-                  onsubmit="return confirm('Clear all log entries? This cannot be undone.')">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($token) ?>">
-                <input type="hidden" name="action" value="clear_logs">
-                <input type="hidden" name="tab" value="logs">
-                <button type="submit" class="btn"
-                        style="background:#ef4444;color:#fff">Clear Logs</button>
-            </form>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                <a href="/sms_log.php" class="btn btn-outline" style="font-size:.85rem;padding:.5rem 1rem">
+                    View Notification Log (<?= $smsLogCount ?>)
+                </a>
+                <form method="post" action="/admin_settings.php"
+                      onsubmit="return confirm('Clear all log entries? This cannot be undone.')">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($token) ?>">
+                    <input type="hidden" name="action" value="clear_logs">
+                    <input type="hidden" name="tab" value="logs">
+                    <button type="submit" class="btn"
+                            style="background:#ef4444;color:#fff">Clear Logs</button>
+                </form>
+            </div>
         </div>
 
         <div class="table-card">
@@ -2257,12 +2263,6 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
             <a href="/admin_settings.php?tab=email" class="subtab-btn">Email</a>
             <a href="/admin_settings.php?tab=sms" class="subtab-btn active">SMS</a>
             <a href="/admin_settings.php?tab=whatsapp" class="subtab-btn">WhatsApp</a>
-        </div>
-        <?php $smsLogCount = (int)$db->query('SELECT COUNT(*) FROM sms_log')->fetchColumn(); ?>
-        <div style="margin-bottom:1.5rem">
-            <a href="/sms_log.php" class="btn btn-outline" style="font-size:.85rem;padding:.5rem 1rem">
-                View SMS Log (<?= $smsLogCount ?>)
-            </a>
         </div>
         <div class="sms-grid">
 

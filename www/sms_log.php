@@ -40,7 +40,7 @@ unset($_SESSION['flash']);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SMS Log — <?= htmlspecialchars($site_name) ?></title>
+    <title>Notification Log — <?= htmlspecialchars($site_name) ?></title>
     <link rel="stylesheet" href="/style.css">
     <style>
         .sms-log-wrap { max-width:1200px; margin:1.5rem auto; padding:0 1rem; }
@@ -69,7 +69,7 @@ unset($_SESSION['flash']);
     <?php endif; ?>
 
     <div class="sms-log-header">
-        <h2>SMS Log (<?= $smsLogCount ?>)</h2>
+        <h2>Notification Log (<?= $smsLogCount ?>)</h2>
         <div class="sms-log-actions">
             <?php if ($smsLogCount > 0): ?>
             <form method="post" style="margin:0" onsubmit="return confirm('Clear all SMS logs?')">
