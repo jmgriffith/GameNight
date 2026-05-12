@@ -180,6 +180,10 @@ $pruned += $db->exec("DELETE FROM api_request_log WHERE created_at < datetime('n
 // Short links: older than 90 days
 $pruned += $db->exec("DELETE FROM short_links WHERE created_at < datetime('now', '-90 days')");
 
+// timer_state: drop event-linked rows whose poker_session is gone. Standalone
+// rows use negative sentinel session_ids and must be preserved.
+$pruned += $db->exec("DELETE FROM timer_state WHERE session_id > 0 AND session_id NOT IN (SELECT id FROM poker_sessions)");
+
 // Weekly VACUUM so deleted pages actually return to the OS. SQLite VACUUM rewrites
 // the whole file, so we gate it to once per week via a site_settings timestamp.
 try {

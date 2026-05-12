@@ -618,6 +618,57 @@ function db_init(PDO $pdo): void {
         error_log('fk_orphan_cleanup_v1 failed: ' . $e->getMessage());
     }
 
+    // Drop the FK on timer_state.session_id. Standalone timer (no event_id) inserts
+    // rows with a negative sentinel session_id (-user_id for logged-in users, or
+    // -crc32(php_session_id) for guests) so a single user/visitor gets one persistent
+    // timer without needing a real poker_sessions row. With FK enforcement now ON,
+    // those inserts fail and /timer.php 500s for every standalone visit. Keep the
+    // preset_id FK (positive real IDs with ON DELETE SET NULL — that one's fine).
+    try {
+        $fkRows = $pdo->query("PRAGMA foreign_key_list(timer_state)")->fetchAll();
+        $hasSessionFk = false;
+        foreach ($fkRows as $fk) {
+            if (($fk['table'] ?? '') === 'poker_sessions') { $hasSessionFk = true; break; }
+        }
+        if ($hasSessionFk) {
+            $pdo->exec("BEGIN");
+            $pdo->exec("ALTER TABLE timer_state RENAME TO timer_state_old");
+            $pdo->exec("CREATE TABLE timer_state (
+                id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id             INTEGER NOT NULL UNIQUE,
+                preset_id              INTEGER,
+                current_level          INTEGER NOT NULL DEFAULT 1,
+                time_remaining_seconds INTEGER NOT NULL DEFAULT 900,
+                is_running             INTEGER NOT NULL DEFAULT 0,
+                remote_key             TEXT,
+                started_at             DATETIME,
+                updated_at             DATETIME DEFAULT CURRENT_TIMESTAMP,
+                commanded_at           DATETIME,
+                user_id                INTEGER,
+                warning_seconds        INTEGER NOT NULL DEFAULT 60,
+                alarm_sound            TEXT,
+                start_sound            TEXT,
+                warning_sound          TEXT,
+                FOREIGN KEY (preset_id) REFERENCES blind_presets(id) ON DELETE SET NULL
+            )");
+            $pdo->exec("INSERT INTO timer_state (id, session_id, preset_id, current_level,
+                            time_remaining_seconds, is_running, remote_key, started_at,
+                            updated_at, commanded_at, user_id, warning_seconds,
+                            alarm_sound, start_sound, warning_sound)
+                        SELECT id, session_id, preset_id, current_level,
+                               time_remaining_seconds, is_running, remote_key, started_at,
+                               updated_at, commanded_at, user_id,
+                               COALESCE(warning_seconds, 60),
+                               alarm_sound, start_sound, warning_sound
+                        FROM timer_state_old");
+            $pdo->exec("DROP TABLE timer_state_old");
+            $pdo->exec("COMMIT");
+        }
+    } catch (Exception $e) {
+        try { $pdo->exec("ROLLBACK"); } catch (Exception $e2) {}
+        error_log('timer_state FK migration failed: ' . $e->getMessage());
+    }
+
     // Drop the FK on activity_log.user_id. Anonymous events (register_attempt,
     // failed_login, password_reset_request, walkin_rsvp, API calls, ...) write
     // user_id=0 as a "no real user" sentinel; with FK enforcement now ON, those
