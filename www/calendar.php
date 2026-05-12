@@ -1366,7 +1366,11 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
         /* View modal */
         .ev-view-title { font-size: 1.15rem; font-weight: 700; margin-bottom: .25rem; }
         .ev-view-meta  { font-size: .82rem; color: #64748b; margin-bottom: .75rem; }
-        .ev-view-desc  { font-size: .9rem; color: #334155; white-space: pre-wrap; }
+        .ev-view-desc  {
+            font-size: .9rem; color: #334155; white-space: pre-wrap;
+            max-height: 30vh; overflow-y: auto;
+            overscroll-behavior: contain; padding-right: .25rem;
+        }
         .ev-view-actions { display: flex; gap: .5rem; margin-top: 1.25rem; }
 
         /* Color swatches */
