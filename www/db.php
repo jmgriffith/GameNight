@@ -102,8 +102,7 @@ function db_init(PDO $pdo): void {
             user_id    INTEGER NOT NULL,
             action     TEXT    NOT NULL,
             ip         TEXT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS site_settings (
@@ -617,6 +616,36 @@ function db_init(PDO $pdo): void {
         }
     } catch (Exception $e) {
         error_log('fk_orphan_cleanup_v1 failed: ' . $e->getMessage());
+    }
+
+    // Drop the FK on activity_log.user_id. Anonymous events (register_attempt,
+    // failed_login, password_reset_request, walkin_rsvp, API calls, ...) write
+    // user_id=0 as a "no real user" sentinel; with FK enforcement now ON, those
+    // inserts fail and crash the request. The admin log viewer already treats
+    // user_id=0 as anonymous via LEFT JOIN ... AND a.user_id != 0.
+    try {
+        $fkRows = $pdo->query("PRAGMA foreign_key_list(activity_log)")->fetchAll();
+        if (!empty($fkRows)) {
+            $pdo->exec("BEGIN");
+            $pdo->exec("ALTER TABLE activity_log RENAME TO activity_log_old");
+            $pdo->exec("CREATE TABLE activity_log (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id    INTEGER NOT NULL,
+                action     TEXT    NOT NULL,
+                ip         TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                severity   TEXT    NOT NULL DEFAULT 'info'
+            )");
+            $pdo->exec("INSERT INTO activity_log (id, user_id, action, ip, created_at, severity)
+                        SELECT id, user_id, action, ip, created_at,
+                               COALESCE(severity, 'info')
+                        FROM activity_log_old");
+            $pdo->exec("DROP TABLE activity_log_old");
+            $pdo->exec("COMMIT");
+        }
+    } catch (Exception $e) {
+        try { $pdo->exec("ROLLBACK"); } catch (Exception $e2) {}
+        error_log('activity_log FK migration failed: ' . $e->getMessage());
     }
 
     // Event visibility + league linkage
