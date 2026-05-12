@@ -618,6 +618,45 @@ function db_init(PDO $pdo): void {
         error_log('fk_orphan_cleanup_v1 failed: ' . $e->getMessage());
     }
 
+    // Drop pending_notifications.event_id FK. cancel_event rows are queued for
+    // events that are about to be deleted; the drain handles missing events via
+    // the payload fallback (title/start_date). With FK enforcement now ON, the
+    // FK prevents this design from working and 500s any event delete that has
+    // un-drained queued notifications (the common case under load).
+    try {
+        $fkRows = $pdo->query("PRAGMA foreign_key_list(pending_notifications)")->fetchAll();
+        if (!empty($fkRows)) {
+            $pdo->exec("BEGIN");
+            $pdo->exec("ALTER TABLE pending_notifications RENAME TO pending_notifications_old");
+            $pdo->exec("CREATE TABLE pending_notifications (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_id        INTEGER NOT NULL,
+                username        TEXT    NOT NULL,
+                notify_type     TEXT    NOT NULL DEFAULT 'invite',
+                created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+                attempted_at    DATETIME,
+                attempts        INTEGER NOT NULL DEFAULT 0,
+                scheduled_for   DATETIME,
+                payload         TEXT,
+                occurrence_date TEXT
+            )");
+            $pdo->exec("INSERT INTO pending_notifications
+                           (id, event_id, username, notify_type, created_at,
+                            attempted_at, attempts, scheduled_for, payload, occurrence_date)
+                        SELECT id, event_id, username, notify_type, created_at,
+                               attempted_at, COALESCE(attempts, 0), scheduled_for, payload, occurrence_date
+                        FROM pending_notifications_old");
+            $pdo->exec("DROP TABLE pending_notifications_old");
+            // Indexes are dropped along with the table; re-create them.
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pending_notifications_unsent ON pending_notifications(attempted_at) WHERE attempted_at IS NULL");
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_pending_notifications_scheduled ON pending_notifications(scheduled_for) WHERE attempted_at IS NULL");
+            $pdo->exec("COMMIT");
+        }
+    } catch (Exception $e) {
+        try { $pdo->exec("ROLLBACK"); } catch (Exception $e2) {}
+        error_log('pending_notifications FK migration failed: ' . $e->getMessage());
+    }
+
     // Drop the FK on timer_state.session_id. Standalone timer (no event_id) inserts
     // rows with a negative sentinel session_id (-user_id for logged-in users, or
     // -crc32(php_session_id) for guests) so a single user/visitor gets one persistent
