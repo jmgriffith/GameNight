@@ -1032,7 +1032,7 @@ function ordinal($n) {
                 <?php if (!empty($lp['share_token'])): ?>
                     <span title="This post has a public share link" style="font-size:.7rem;font-weight:600;color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:999px;padding:.1rem .5rem">&#128279; Public link</span>
                 <?php endif; ?>
-                <span>&#128197; <?= htmlspecialchars((new DateTime($lp['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(get_setting('timezone', 'UTC')))->format('F j, Y')) ?></span>
+                <span>&#128197; <?= htmlspecialchars((new DateTime($lp['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(display_timezone()))->format('F j, Y')) ?></span>
                 <?php if (!empty($lp['author_name'])): ?><span>by <?= htmlspecialchars($lp['author_name']) ?></span><?php endif; ?>
                 <?php if ($lp_can_edit): ?>
                 <?php $__pbtn = 'font-size:.72rem;padding:.25rem .7rem;min-width:72px;text-align:center;line-height:1.2;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center'; ?>
@@ -1122,7 +1122,7 @@ function ordinal($n) {
                         <div class="comment-content" style="flex:1;min-width:0">
                             <div style="font-size:.75rem;color:#94a3b8;margin-bottom:.15rem">
                                 <strong style="color:#334155"><?= htmlspecialchars($c['username']) ?></strong>
-                                <?= htmlspecialchars((new DateTime($c['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(get_setting('timezone', 'UTC')))->format('M j, Y g:i A')) ?>
+                                <?= htmlspecialchars((new DateTime($c['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(display_timezone()))->format('M j, Y g:i A')) ?>
                             </div>
                             <div style="font-size:.9rem;color:#334155"><?= htmlspecialchars($c['body']) ?></div>
                         </div>
@@ -1161,7 +1161,7 @@ function ordinal($n) {
         );
         $akStmt->execute([$league_id]);
         $api_keys = $akStmt->fetchAll();
-        $ak_local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+        $ak_local_tz = new DateTimeZone(display_timezone());
         $ak_fmt = function (?string $utc) use ($ak_local_tz): string {
             if (!$utc) return '—';
             try { return (new DateTime($utc, new DateTimeZone('UTC')))->setTimezone($ak_local_tz)->format('M j, Y g:i A'); }

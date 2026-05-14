@@ -512,6 +512,9 @@ function db_init(PDO $pdo): void {
     try { $pdo->exec("ALTER TABLE users ADD COLUMN tier_source TEXT"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE users ADD COLUMN tier_granted_by INTEGER"); } catch (Exception $e) {}
 
+    // Per-user timezone preference. NULL = follow site timezone (the default).
+    try { $pdo->exec("ALTER TABLE users ADD COLUMN timezone TEXT"); } catch (Exception $e) {}
+
     // ─── Leagues ───────────────────────────────────────────────
     try { $pdo->exec("CREATE TABLE IF NOT EXISTS leagues (
         id                 INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1017,6 +1020,91 @@ function set_setting(string $key, string $value): void {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value')
         ->execute([$key, $store]);
     $_settings_cache[$key] = $value; // cache the decrypted value
+}
+
+/**
+ * Named timezone options shown to both admins (site-wide setting) and users (personal pref).
+ * Keys are human-readable labels; values are IANA identifiers. Order is by UTC offset.
+ */
+function get_timezone_options(): array {
+    static $opts = null;
+    if ($opts === null) {
+        $opts = [
+            'UTC-12:00 — International Date Line West'          => 'Etc/GMT+12',
+            'UTC-11:00 — American Samoa'                        => 'Pacific/Pago_Pago',
+            'UTC-10:00 — Hawaii'                                => 'Pacific/Honolulu',
+            'UTC-09:30 — Marquesas Islands'                     => 'Pacific/Marquesas',
+            'UTC-09:00 — Alaska'                                => 'America/Anchorage',
+            'UTC-08:00 — Pacific Time (US & Canada)'            => 'America/Los_Angeles',
+            'UTC-07:00 — Mountain Time (US & Canada)'           => 'America/Denver',
+            'UTC-07:00 — Arizona (no DST)'                      => 'America/Phoenix',
+            'UTC-06:00 — Central Time (US & Canada)'            => 'America/Chicago',
+            'UTC-05:00 — Eastern Time (US & Canada)'            => 'America/New_York',
+            'UTC-04:00 — Atlantic Time (Canada)'                => 'America/Halifax',
+            'UTC-03:30 — Newfoundland'                          => 'America/St_Johns',
+            'UTC-03:00 — Buenos Aires'                          => 'America/Argentina/Buenos_Aires',
+            'UTC-03:00 — Sao Paulo'                             => 'America/Sao_Paulo',
+            'UTC-02:00 — Mid-Atlantic'                          => 'Etc/GMT+2',
+            'UTC-01:00 — Azores'                                => 'Atlantic/Azores',
+            'UTC+00:00 — London, Dublin, Lisbon'                => 'Europe/London',
+            'UTC+00:00 — Reykjavik (no DST)'                    => 'Atlantic/Reykjavik',
+            'UTC+01:00 — Paris, Berlin, Rome, Madrid'           => 'Europe/Paris',
+            'UTC+02:00 — Helsinki, Cairo, Johannesburg'         => 'Europe/Helsinki',
+            'UTC+03:00 — Moscow, Nairobi'                       => 'Europe/Moscow',
+            'UTC+03:00 — Baghdad'                               => 'Asia/Baghdad',
+            'UTC+03:30 — Tehran'                                => 'Asia/Tehran',
+            'UTC+04:00 — Dubai, Abu Dhabi'                      => 'Asia/Dubai',
+            'UTC+04:00 — Baku'                                  => 'Asia/Baku',
+            'UTC+04:30 — Kabul'                                 => 'Asia/Kabul',
+            'UTC+05:00 — Karachi, Islamabad'                    => 'Asia/Karachi',
+            'UTC+05:30 — Mumbai, Kolkata, New Delhi'            => 'Asia/Kolkata',
+            'UTC+05:45 — Kathmandu'                             => 'Asia/Kathmandu',
+            'UTC+06:00 — Dhaka, Almaty'                         => 'Asia/Dhaka',
+            'UTC+06:30 — Yangon'                                => 'Asia/Yangon',
+            'UTC+07:00 — Bangkok, Hanoi, Jakarta'               => 'Asia/Bangkok',
+            'UTC+08:00 — Beijing, Singapore, Hong Kong'         => 'Asia/Shanghai',
+            'UTC+08:00 — Perth'                                 => 'Australia/Perth',
+            'UTC+08:45 — Eucla'                                 => 'Australia/Eucla',
+            'UTC+09:00 — Tokyo, Osaka'                          => 'Asia/Tokyo',
+            'UTC+09:00 — Seoul'                                 => 'Asia/Seoul',
+            'UTC+09:30 — Darwin (no DST)'                       => 'Australia/Darwin',
+            'UTC+09:30 — Adelaide'                              => 'Australia/Adelaide',
+            'UTC+10:00 — Sydney, Melbourne'                     => 'Australia/Sydney',
+            'UTC+10:00 — Brisbane (no DST)'                     => 'Australia/Brisbane',
+            'UTC+10:30 — Lord Howe Island'                      => 'Australia/Lord_Howe',
+            'UTC+11:00 — Solomon Islands, New Caledonia'        => 'Pacific/Guadalcanal',
+            'UTC+12:00 — Auckland, Wellington'                  => 'Pacific/Auckland',
+            'UTC+12:00 — Fiji'                                  => 'Pacific/Fiji',
+            'UTC+12:45 — Chatham Islands'                       => 'Pacific/Chatham',
+            'UTC+13:00 — Tonga'                                 => 'Pacific/Tongatapu',
+            'UTC+13:00 — Samoa'                                 => 'Pacific/Apia',
+            'UTC+14:00 — Line Islands (Kiribati)'               => 'Pacific/Kiritimati',
+        ];
+    }
+    return $opts;
+}
+
+/**
+ * Returns the IANA timezone to use for display purposes.
+ * - If $user_id is passed and that user has a personal timezone set, returns it.
+ * - Else if the current session is logged in and that user has a personal timezone, returns it.
+ * - Otherwise falls back to the site-wide timezone from site_settings.
+ *
+ * Pass an explicit $user_id when rendering content addressed to a specific recipient
+ * (e.g. notification bodies in cron context), where the viewer differs from the user.
+ */
+function display_timezone(?int $user_id = null): string {
+    static $cache = [];
+    $site_tz = get_setting('timezone', 'UTC');
+    $uid = $user_id ?? ($_SESSION['user_id'] ?? null);
+    if (!$uid) return $site_tz;
+    if (!array_key_exists($uid, $cache)) {
+        $stmt = get_db()->prepare('SELECT timezone FROM users WHERE id = ?');
+        $stmt->execute([$uid]);
+        $tz = (string)$stmt->fetchColumn();
+        $cache[$uid] = ($tz !== '' && in_array($tz, DateTimeZone::listIdentifiers(), true)) ? $tz : null;
+    }
+    return $cache[$uid] ?? $site_tz;
 }
 
 /**

@@ -1,6 +1,6 @@
 <?php
 /* Shared footer partial — included by every full-page template. */
-$_ftz  = new DateTimeZone(get_setting('timezone', 'UTC'));
+$_ftz  = new DateTimeZone(display_timezone());
 $_fnow = new DateTime('now', $_ftz);
 ?>
 <footer>

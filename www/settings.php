@@ -27,6 +27,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pref_contact = in_array($_POST['preferred_contact'] ?? '', ['email', 'sms', 'whatsapp', 'both', 'none'])
                             ? $_POST['preferred_contact'] : 'email';
             $past_days = in_array((int)($_POST['my_events_past_days'] ?? 30), [7,14,30,60,90,180,365]) ? (int)$_POST['my_events_past_days'] : 30;
+            $tz_in     = trim($_POST['timezone'] ?? '');
+            $valid_tzs = array_values(get_timezone_options());
+            $timezone  = ($tz_in !== '' && in_array($tz_in, $valid_tzs, true)) ? $tz_in : '';
 
             if ($username === '') {
                 $flash = ['type' => 'error', 'msg' => 'Username cannot be empty.'];
@@ -44,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $oldPhone->execute([$current['id']]);
                         $phoneChanged = ($oldPhone->fetchColumn() ?? '') !== ($phone ?: null);
 
-                        $db->prepare('UPDATE users SET username = ?, email = ?, phone = ?, preferred_contact = ?, my_events_past_days = ?, phone_verified = CASE WHEN ? THEN 0 ELSE phone_verified END WHERE id = ?')
-                           ->execute([$username, $email, $phone ?: null, $pref_contact, $past_days, $phoneChanged ? 1 : 0, $current['id']]);
+                        $db->prepare('UPDATE users SET username = ?, email = ?, phone = ?, preferred_contact = ?, my_events_past_days = ?, timezone = ?, phone_verified = CASE WHEN ? THEN 0 ELSE phone_verified END WHERE id = ?')
+                           ->execute([$username, $email, $phone ?: null, $pref_contact, $past_days, $timezone !== '' ? $timezone : null, $phoneChanged ? 1 : 0, $current['id']]);
                         db_log_activity($current['id'], 'updated profile');
                         $flash = ['type' => 'success', 'msg' => 'Profile updated.'];
                     } catch (PDOException $e) {
@@ -161,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Reload fresh user data after possible username change
-$me = $db->prepare('SELECT username, email, phone, preferred_contact, my_events_past_days, my_events_future_days, phone_verified, role, created_at, last_login FROM users WHERE id = ?');
+$me = $db->prepare('SELECT username, email, phone, preferred_contact, my_events_past_days, my_events_future_days, phone_verified, role, created_at, last_login, timezone FROM users WHERE id = ?');
 $me->execute([$current['id']]);
 $me = $me->fetch();
 
@@ -251,6 +254,16 @@ $site_name = get_setting('site_name', 'Game Night');
                         <?php endforeach; ?>
                     </select>
                     <p class="hint">How far back past events appear on the My Events page.</p>
+                </div>
+                <div class="form-group">
+                    <label for="timezone">Timezone</label>
+                    <select id="timezone" name="timezone" style="width:100%;padding:.5rem .75rem;border:1.5px solid #e2e8f0;border-radius:8px;font-size:.95rem;background:#fff">
+                        <option value="">Use site default (<?= htmlspecialchars(get_setting('timezone', 'UTC')) ?>)</option>
+                        <?php foreach (get_timezone_options() as $tz_label => $tz_id): ?>
+                        <option value="<?= htmlspecialchars($tz_id) ?>"<?= ($me['timezone'] ?? '') === $tz_id ? ' selected' : '' ?>><?= htmlspecialchars($tz_label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p class="hint">Event times and the footer clock will display in this timezone. Notifications sent to you will also use it.</p>
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">Save Profile</button>
             </form>

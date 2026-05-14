@@ -661,7 +661,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── Logs data ─────────────────────────────────────────────────────────────────
-$local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+$local_tz = new DateTimeZone(display_timezone());
 $page     = max(1, (int)($_GET['page'] ?? 1));
 $per_page = 50;
 $offset   = ($page - 1) * $per_page;

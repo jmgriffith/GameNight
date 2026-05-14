@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($title === '' || $content === '') {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Title and content are required.'];
         } else {
-            $local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+            $local_tz = new DateTimeZone(display_timezone());
             $utc_tz   = new DateTimeZone('UTC');
             $dt = ($d !== '')
                 ? (new DateTime("$d " . ($t ?: '00:00'), $local_tz))->setTimezone($utc_tz)->format('Y-m-d H:i:s')
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($id <= 0 || $title === '' || $content === '') {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Title and content are required.'];
         } else {
-            $local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+            $local_tz = new DateTimeZone(display_timezone());
             $utc_tz   = new DateTimeZone('UTC');
             $dt = ($d !== '')
                 ? (new DateTime("$d " . ($t ?: '00:00'), $local_tz))->setTimezone($utc_tz)->format('Y-m-d H:i:s')
@@ -196,7 +196,7 @@ if ($edit_id > 0) {
 $posts    = $db->query('SELECT p.id, p.title, p.created_at, p.pinned, p.hidden, p.league_id, l.name AS league_name FROM posts p LEFT JOIN leagues l ON l.id = p.league_id ORDER BY p.pinned DESC, p.created_at DESC')->fetchAll();
 $allLeagues = $db->query('SELECT id, name FROM leagues ORDER BY LOWER(name)')->fetchAll();
 $token    = csrf_token();
-$local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+$local_tz = new DateTimeZone(display_timezone());
 $now_local = (new DateTime('now', $local_tz))->format('Y-m-d H:i:s');
 ?>
 <!DOCTYPE html>
@@ -656,7 +656,7 @@ function bulkDelete() {
 openModal(
     <?= (int)$edit_post['id'] ?>,
     <?= json_encode($edit_post['title']) ?>,
-    <?= json_encode((new DateTime($edit_post['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(get_setting('timezone', 'UTC')))->format('Y-m-d H:i:s')) ?>,
+    <?= json_encode((new DateTime($edit_post['created_at'], new DateTimeZone('UTC')))->setTimezone(new DateTimeZone(display_timezone()))->format('Y-m-d H:i:s')) ?>,
     <?= json_encode($edit_post['content']) ?>,
     <?= (int)$edit_post['pinned'] ?>,
     <?= (int)($edit_post['league_id'] ?? 0) ?>

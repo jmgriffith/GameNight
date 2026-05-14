@@ -42,7 +42,7 @@ if (!$current && get_setting('show_landing_page', '0') === '1') {
 }
 
 $site_name = get_setting('site_name', 'Game Night');
-$local_tz  = new DateTimeZone(get_setting('timezone', 'UTC'));
+$local_tz  = new DateTimeZone(display_timezone());
 
 session_start_safe();
 $flash = ['type' => '', 'msg' => ''];

@@ -49,7 +49,7 @@ $keys = $db->query(
      ORDER BY k.created_at DESC"
 )->fetchAll();
 
-$local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+$local_tz = new DateTimeZone(display_timezone());
 function api_keys_admin_fmt(?string $utc_dt, DateTimeZone $local_tz): string {
     if (!$utc_dt) return '—';
     try {

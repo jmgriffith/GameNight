@@ -9,8 +9,8 @@ $site_name = get_setting('site_name', 'Game Night');
 $chunk = 5;
 $monthFilter = preg_match('/^\d{4}-\d{2}$/', $_GET['month'] ?? '') ? $_GET['month'] : null;
 
-// Dates stored in UTC — compare against UTC now, display in configured timezone
-$local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+// Dates stored in UTC — compare against UTC now, display in viewer's timezone
+$local_tz = new DateTimeZone(display_timezone());
 $now      = (new DateTime('now', new DateTimeZone('UTC')))->format('Y-m-d H:i:s');
 
 // Feed visibility: global posts + posts from leagues the user belongs to; never rules or hidden.

@@ -142,9 +142,15 @@ function current_user(): ?array {
     }
     if ($id === null) return null;
 
-    $stmt = get_db()->prepare('SELECT id, username, email, role, last_login, must_change_password, my_events_past_days, my_events_future_days FROM users WHERE id = ?');
+    $stmt = get_db()->prepare('SELECT id, username, email, role, last_login, must_change_password, my_events_past_days, my_events_future_days, timezone FROM users WHERE id = ?');
     $stmt->execute([$id]);
-    return $stmt->fetch() ?: null;
+    $row = $stmt->fetch() ?: null;
+    // Personal timezone overrides the site default (which was set in get_db()).
+    // Cron / webhooks / API endpoints don't call current_user(), so they keep site tz.
+    if ($row && !empty($row['timezone']) && in_array($row['timezone'], DateTimeZone::listIdentifiers(), true)) {
+        date_default_timezone_set($row['timezone']);
+    }
+    return $row;
 }
 
 function require_login(): array {

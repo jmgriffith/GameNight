@@ -9,7 +9,7 @@ require_once __DIR__ . '/_posts.php';
 
 $user     = current_user();
 $db       = get_db();
-$local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+$local_tz = new DateTimeZone(display_timezone());
 $isAdmin  = $user && $user['role'] === 'admin';
 $csrf     = $user ? csrf_token() : '';
 

@@ -271,7 +271,7 @@ function dispatch_queued_notification(PDO $db, array $row): bool {
         }
     }
 
-    $uStmt = $db->prepare('SELECT username, email, phone, preferred_contact FROM users WHERE LOWER(username) = LOWER(?)');
+    $uStmt = $db->prepare('SELECT id, username, email, phone, preferred_contact FROM users WHERE LOWER(username) = LOWER(?)');
     $uStmt->execute([$username]);
     $user = $uStmt->fetch();
 
@@ -307,9 +307,22 @@ function dispatch_queued_notification(PDO $db, array $row): bool {
         $url = shorten_url($url);
     }
 
+    // Render event time in the RECIPIENT's timezone. Event start_time is wall-clock in
+    // the site timezone; combine with the date there, then convert to recipient tz.
+    // Custom invitees (no users row) have no id → fall through to site tz.
+    $site_tz      = new DateTimeZone(get_setting('timezone', 'UTC'));
+    $recipient_tz = new DateTimeZone(display_timezone(!empty($user['id']) ? (int)$user['id'] : null));
+
     $title  = $event['title'];
     $start  = $occ_date ?: $event['start_date'];
-    $pretty_time = $event['start_time'] ? date('g:i A', strtotime($event['start_time'])) : '';
+    $pretty_time = '';
+    if (!empty($event['start_time'])) {
+        $dt = new DateTime($start . ' ' . $event['start_time'], $site_tz);
+        $dt->setTimezone($recipient_tz);
+        $pretty_time = $dt->format('g:i A T');
+        // Date may roll over a day in extreme offsets (e.g. site UTC, recipient Auckland)
+        $start = $dt->format('Y-m-d');
+    }
 
     $subject = ''; $smsBody = ''; $htmlBody = '';
 
