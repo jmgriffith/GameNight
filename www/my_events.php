@@ -15,7 +15,11 @@ if (isset($_GET['past_days'])) {
 }
 
 $site_name = get_setting('site_name', 'Game Night');
+// Event start/end times are stored as wall-clock in site tz. $local_tz is used for
+// upcoming/past splits and sort order (must stay site-anchored so all viewers
+// classify the same event identically). $viewer_tz is used for display only.
 $local_tz  = new DateTimeZone(get_setting('timezone', 'UTC'));
+$viewer_tz = new DateTimeZone(display_timezone());
 $now       = new DateTime('now', $local_tz);
 $past_days   = (int)($current['my_events_past_days'] ?? 30);
 $cutoff_past = (clone $now)->modify("-{$past_days} days")->format('Y-m-d');
@@ -74,8 +78,9 @@ usort($past, function($a, $b) use ($local_tz) {
 
 $token = csrf_token();
 
-function fmt_date(string $date, ?string $time, DateTimeZone $tz): string {
-    $dt = new DateTime($date . ($time ? ' ' . $time : ''), $tz);
+function fmt_date(string $date, ?string $time, DateTimeZone $site_tz, ?DateTimeZone $viewer_tz = null): string {
+    $dt = new DateTime($date . ($time ? ' ' . $time : ''), $site_tz);
+    if ($viewer_tz) $dt->setTimezone($viewer_tz);
     return $dt->format('D, M j, Y') . ($time ? ' &middot; ' . $dt->format('g:i A') : '');
 }
 
@@ -181,11 +186,11 @@ function rsvp_badge(?string $rsvp, ?string $approval_status = 'approved'): strin
                     <?php endif; ?>
                 </div>
                 <div style="font-size:.85rem;color:#64748b">
-                    <?= fmt_date($ev['start_date'], $ev['start_time'], $local_tz) ?>
+                    <?= fmt_date($ev['start_date'], $ev['start_time'], $local_tz, $viewer_tz) ?>
                     <?php if ($ev['end_date'] && $ev['end_date'] !== $ev['start_date']): ?>
-                    &ndash; <?= fmt_date($ev['end_date'], $ev['end_time'], $local_tz) ?>
+                    &ndash; <?= fmt_date($ev['end_date'], $ev['end_time'], $local_tz, $viewer_tz) ?>
                     <?php elseif ($ev['end_time']): ?>
-                    &ndash; <?= (new DateTime($ev['start_date'] . ' ' . $ev['end_time'], $local_tz))->format('g:i A') ?>
+                    &ndash; <?= (new DateTime($ev['start_date'] . ' ' . $ev['end_time'], $local_tz))->setTimezone($viewer_tz)->format('g:i A') ?>
                     <?php endif; ?>
                 </div>
                 <?php if (!empty($ev['description'])): ?>
@@ -245,7 +250,7 @@ function rsvp_badge(?string $rsvp, ?string $approval_status = 'approved'): strin
                     <?php endif; ?>
                 </div>
                 <div style="font-size:.85rem;color:#94a3b8">
-                    <?= fmt_date($ev['start_date'], $ev['start_time'], $local_tz) ?>
+                    <?= fmt_date($ev['start_date'], $ev['start_time'], $local_tz, $viewer_tz) ?>
                 </div>
             </div>
             <a href="<?= htmlspecialchars($cal_url) ?>"

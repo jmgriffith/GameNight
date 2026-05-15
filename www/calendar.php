@@ -819,6 +819,11 @@ $evQuery = $db->prepare(
 $evQuery->execute(array_merge([$monthEnd, $monthStart, $monthStart], $_vis['params']));
 $allEvents = $evQuery->fetchAll();
 
+// Enrich each event with viewer-tz formatted time strings. Event start_time/end_time
+// are stored as wall-clock in site tz; viewers in different tz get their own labels.
+$_site_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+foreach ($allEvents as &$_ev) { $_ev = event_display_times($_ev, $_site_tz, $local_tz); }
+unset($_ev);
 
 $exceptions = load_exceptions($db, $allEvents);
 $byDate     = build_event_by_date($allEvents, $monthStart, $monthEnd, $local_tz, $exceptions);
@@ -866,6 +871,8 @@ if ($viewMode === 'week') {
     );
     $wkEvQ->execute(array_merge([$wkEndStr, $wkStartStr, $wkStartStr], $_visW['params']));
     $wkAllEvents = $wkEvQ->fetchAll();
+    foreach ($wkAllEvents as &$_ev) { $_ev = event_display_times($_ev, $_site_tz, $local_tz); }
+    unset($_ev);
     $wkByDate    = build_event_by_date($wkAllEvents, $wkStartStr, $wkEndStr, $local_tz);
 }
 
@@ -1513,7 +1520,7 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
                          title="<?= htmlspecialchars($_lgName ? $_lgName . ' — ' . $ev['title'] : $ev['title']) ?>">
                         <span class="ev-label">
                             <?php if ($ev['start_time'] && $ev['start_date'] === $dateStr): ?>
-                                <?= htmlspecialchars(date('g:ia', strtotime($ev['start_time']))) ?>
+                                <?= htmlspecialchars($ev['start_time_display'] ?: date('g:ia', strtotime($ev['start_time']))) ?>
                             <?php endif; ?>
                             <?php if ($_lgTag !== ''): ?><span class="ev-league-tag" title="<?= htmlspecialchars($_lgName) ?>"><?= htmlspecialchars($_lgTag) ?></span><?php endif; ?>
                             <?= htmlspecialchars($ev['title']) ?>
@@ -1960,8 +1967,8 @@ function viewEvent(ev) {
     let meta = ev.start_date;
     if (ev.end_date && ev.end_date !== ev.start_date) meta += ' \u2013 ' + ev.end_date;
     if (ev.start_time) {
-        meta += '  \u00b7  ' + fmt12(ev.start_time);
-        if (ev.end_time) meta += ' \u2013 ' + fmt12(ev.end_time);
+        meta += '  \u00b7  ' + (ev.start_time_display || fmt12(ev.start_time));
+        if (ev.end_time) meta += ' \u2013 ' + (ev.end_time_display || fmt12(ev.end_time));
     }
     // Seat count for poker events
     var ps = ev ? (eventPoker[ev.id] || null) : null;
@@ -3503,7 +3510,7 @@ function renderDayCol(col, date) {
         chip.title = (ev.league_name ? ev.league_name + ' \u2014 ' : '') + ev.title;
         chip.addEventListener('click', () => viewEvent(ev));
 
-        const timeStr = fmt12(ev.start_time) + (ev.end_time ? '\u2013' + fmt12(ev.end_time) : '');
+        const timeStr = (ev.start_time_display || fmt12(ev.start_time)) + (ev.end_time ? '\u2013' + (ev.end_time_display || fmt12(ev.end_time)) : '');
         let _lgTag = '';
         if (ev.league_name) {
             const _words = String(ev.league_name).trim().split(/\s+/);

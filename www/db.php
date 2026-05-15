@@ -1093,6 +1093,33 @@ function get_timezone_options(): array {
  * Pass an explicit $user_id when rendering content addressed to a specific recipient
  * (e.g. notification bodies in cron context), where the viewer differs from the user.
  */
+/**
+ * Enrich an event row with `start_time_display` / `end_time_display` formatted in
+ * the viewer's timezone. Event times are stored as wall-clock strings interpreted
+ * in the site's timezone; this helper parses them in site tz, converts to viewer
+ * tz, and formats as "g:ia" to match the calendar's JS fmt12().
+ *
+ * Pass $occ_date for recurring-event occurrences so the displayed date matches
+ * the actual occurrence (not the master event's start_date).
+ */
+function event_display_times(array $ev, DateTimeZone $site_tz, DateTimeZone $viewer_tz, ?string $occ_date = null): array {
+    $ev['start_time_display'] = '';
+    $ev['end_time_display']   = '';
+    $base_date = $occ_date ?: ($ev['start_date'] ?? null);
+    if ($base_date && !empty($ev['start_time'])) {
+        $dt = new DateTime($base_date . ' ' . $ev['start_time'], $site_tz);
+        $dt->setTimezone($viewer_tz);
+        $ev['start_time_display'] = $dt->format('g:ia');
+    }
+    if ($base_date && !empty($ev['end_time'])) {
+        $end_base = $ev['end_date'] ?: $base_date;
+        $dt = new DateTime($end_base . ' ' . $ev['end_time'], $site_tz);
+        $dt->setTimezone($viewer_tz);
+        $ev['end_time_display'] = $dt->format('g:ia');
+    }
+    return $ev;
+}
+
 function display_timezone(?int $user_id = null): string {
     static $cache = [];
     $site_tz = get_setting('timezone', 'UTC');

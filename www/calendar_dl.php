@@ -629,6 +629,12 @@ $evQuery = $db->prepare(
 $evQuery->execute(array_merge([$monthEnd, $monthStart, $monthStart, $monthEnd, $monthStart], $_vis['params']));
 $allEvents = $evQuery->fetchAll();
 
+// Viewer's display timezone — used to render event times in their local clock.
+// $local_tz stays as site tz so event date-math (recurrence, cutoffs) is consistent.
+$_viewer_tz = new DateTimeZone(display_timezone());
+foreach ($allEvents as &$_ev) { $_ev = event_display_times($_ev, $local_tz, $_viewer_tz); }
+unset($_ev);
+
 // ── Helper: expand events (including recurring) into a date-keyed array ───────
 // $exceptions: [event_id => ['YYYY-MM-DD', ...]] — occurrence start dates to skip
 // build_event_by_date() and load_exceptions() are defined in db.php
@@ -734,6 +740,8 @@ if ($viewMode === 'week') {
     );
     $wkEvQ->execute(array_merge([$wkEndStr, $wkStartStr, $wkStartStr, $wkEndStr, $wkStartStr], $_visW['params']));
     $wkAllEvents  = $wkEvQ->fetchAll();
+    foreach ($wkAllEvents as &$_ev) { $_ev = event_display_times($_ev, $local_tz, $_viewer_tz); }
+    unset($_ev);
     $wkExceptions = load_exceptions($db, $wkAllEvents);
     $wkByDate     = build_event_by_date($wkAllEvents, $wkStartStr, $wkEndStr, $local_tz, $wkExceptions);
 }
@@ -1184,7 +1192,7 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
                          title="<?= htmlspecialchars($ev['title']) ?>">
                         <span class="ev-label">
                             <?php if ($ev['start_time'] && $ev['start_date'] === $dateStr): ?>
-                                <?= htmlspecialchars(date('g:ia', strtotime($ev['start_time']))) ?>
+                                <?= htmlspecialchars($ev['start_time_display'] ?: date('g:ia', strtotime($ev['start_time']))) ?>
                             <?php endif; ?>
                             <?= htmlspecialchars($ev['title']) ?>
                         </span>
@@ -1584,8 +1592,8 @@ function viewEvent(ev) {
     let meta = ev.start_date;
     if (ev.end_date && ev.end_date !== ev.start_date) meta += ' \u2013 ' + ev.end_date;
     if (ev.start_time) {
-        meta += '  \u00b7  ' + fmt12(ev.start_time);
-        if (ev.end_time) meta += ' \u2013 ' + fmt12(ev.end_time);
+        meta += '  \u00b7  ' + (ev.start_time_display || fmt12(ev.start_time));
+        if (ev.end_time) meta += ' \u2013 ' + (ev.end_time_display || fmt12(ev.end_time));
     }
     document.getElementById('vMeta').textContent = meta;
 
@@ -2432,7 +2440,7 @@ function renderDayCol(col, date) {
         chip.title = ev.title;
         chip.addEventListener('click', () => viewEvent(ev));
 
-        const timeStr = fmt12(ev.start_time) + (ev.end_time ? '\u2013' + fmt12(ev.end_time) : '');
+        const timeStr = (ev.start_time_display || fmt12(ev.start_time)) + (ev.end_time ? '\u2013' + (ev.end_time_display || fmt12(ev.end_time)) : '');
         chip.innerHTML = '<span class="week-event-title">' + escHtml(ev.title) + '</span>'
             + (heightPx >= 32 ? '<span class="week-event-time">' + escHtml(timeStr) + '</span>' : '');
 

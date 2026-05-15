@@ -228,7 +228,11 @@ $leagueEvents = $evStmt->fetchAll();
 
 // Split into upcoming / past using full datetime (mirrors my_events.php)
 $ev_local_tz = new DateTimeZone(get_setting('timezone', 'UTC'));
+$ev_viewer_tz = new DateTimeZone(display_timezone());
 $ev_now      = new DateTime('now', $ev_local_tz);
+// Enrich each event with viewer-tz formatted time strings for display below.
+foreach ($leagueEvents as &$_e) { $_e = event_display_times($_e, $ev_local_tz, $ev_viewer_tz); }
+unset($_e);
 
 $allowed_past_lg = [7, 14, 30, 60, 90, 180, 365];
 $lg_past_days = (int)($_GET['past_days'] ?? 30);
@@ -668,7 +672,7 @@ function ordinal($n) {
                         <strong><?= htmlspecialchars($e['title']) ?></strong>
                         <div style="font-size:.8rem;color:#64748b">
                             <?= htmlspecialchars($e['start_date']) ?>
-                            <?php if (!empty($e['start_time'])): ?> &middot; <?= htmlspecialchars(substr($e['start_time'], 0, 5)) ?><?php endif; ?>
+                            <?php if (!empty($e['start_time'])): ?> &middot; <?= htmlspecialchars($e['start_time_display'] ?: substr($e['start_time'], 0, 5)) ?><?php endif; ?>
                             &middot; <?= htmlspecialchars($e['visibility']) ?>
                         </div>
                     </div>
@@ -697,7 +701,7 @@ function ordinal($n) {
                             <strong><?= htmlspecialchars($e['title']) ?></strong>
                             <div style="font-size:.8rem;color:#64748b">
                                 <?= htmlspecialchars($e['start_date']) ?>
-                                <?php if (!empty($e['start_time'])): ?> &middot; <?= htmlspecialchars(substr($e['start_time'], 0, 5)) ?><?php endif; ?>
+                                <?php if (!empty($e['start_time'])): ?> &middot; <?= htmlspecialchars($e['start_time_display'] ?: substr($e['start_time'], 0, 5)) ?><?php endif; ?>
                                 &middot; <?= htmlspecialchars($e['visibility']) ?>
                             </div>
                         </div>
