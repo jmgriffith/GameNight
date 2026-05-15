@@ -1357,12 +1357,12 @@ function get_site_url(): string {
  * Canonicalize a US phone number for storage and lookup.
  *
  * Accepts any format the user types:
- *   8326422893
- *   832-642-2893
- *   (832) 642-2893
- *   832.642.2893
- *   +1 (832) 642-2893
- *   1-832-642-2893
+ *   xxxxxxxxxx
+ *   xxx-xxx-xxxx
+ *   (xxx) xxx-xxxx
+ *   xxx.xxx.xxxx
+ *   +1 (xxx) xxx-xxxx
+ *   1-xxx-xxx-xxxx
  *
  * Returns the canonical "XXX-XXX-XXXX" string used everywhere in the DB
  * (users.phone, event_invites.phone, league_members.contact_phone,

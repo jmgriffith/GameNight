@@ -294,7 +294,7 @@ All notable changes to GameNight are documented here.
 
 ### Fixed
 - **Pending league members (phone-only) now appear in the event editor's invite picker.** Two related bugs: (1) the picker's pending-league SQL used `LOWER(contact_email) AS username`, which came back NULL for invitees added with phone only — the dedup helper then silently dropped them. SQL now falls back to phone, then to a synthetic `pending:NN` key. (2) Admins were never running through the pending-league branch at all; their early-return only loaded site users. Admins now also get pending league invitees when a league is selected, just like non-admins do.
-- **Pending invitees clicked from All Users now show their name on the Invited side.** Because the picker's synthetic username for phone-only pending invitees is the phone number, clicking one to invite them rendered the phone digits as the visible label. The picker now uses `display_name` as the saved invite username for pending rows, so invited entries read "Randy" instead of "8328074749" and the saved `invite_username` carries the human name.
+- **Pending invitees clicked from All Users now show their name on the Invited side.** Because the picker's synthetic username for phone-only pending invitees is the phone number, clicking one to invite them rendered the phone digits as the visible label. The picker now uses `display_name` as the saved invite username for pending rows, so invited entries read "Randy" instead of "xxxxxxxxxx" and the saved `invite_username` carries the human name.
 
 ---
 
@@ -344,7 +344,7 @@ All notable changes to GameNight are documented here.
 ## [v0.19017] — 2026-04-24
 
 ### Fixed
-- **Custom invitees now get added to the league Members tab reliably.** When a host added a "+Custom Invitee" to a league event, the invitee was added to the host's contacts but frequently did NOT show up on the League → Members tab, even when they were an existing registered user. Two gaps in `auto_add_pending_to_league()` in `db.php`: (1) the phone value from the combined "Email or phone" field was passed through raw (unnormalized), so `WHERE phone = ?` missed any `users.phone` stored in canonical `XXX-XXX-XXXX` form whenever the host typed a different format like `(281) 215-5889` or `2812155889`; (2) there was no username fallback, so a custom invitee typed as just a username (no contact info) never resolved to the real user. Function now runs `normalize_phone()` at its own boundary and falls back to `WHERE LOWER(username) = LOWER(?)` like `auto_add_contact()` already did.
+- **Custom invitees now get added to the league Members tab reliably.** When a host added a "+Custom Invitee" to a league event, the invitee was added to the host's contacts but frequently did NOT show up on the League → Members tab, even when they were an existing registered user. Two gaps in `auto_add_pending_to_league()` in `db.php`: (1) the phone value from the combined "Email or phone" field was passed through raw (unnormalized), so `WHERE phone = ?` missed any `users.phone` stored in canonical `XXX-XXX-XXXX` form whenever the host typed a different format like `(xxx) xxx-xxxx` or `xxxxxxxxxx`; (2) there was no username fallback, so a custom invitee typed as just a username (no contact info) never resolved to the real user. Function now runs `normalize_phone()` at its own boundary and falls back to `WHERE LOWER(username) = LOWER(?)` like `auto_add_contact()` already did.
 
 ---
 
@@ -417,8 +417,8 @@ All notable changes to GameNight are documented here.
 ## [v0.19010] — 2026-04-23
 
 ### Added
-- **Client-side phone auto-formatter.** Typing `8326422893` in any phone field now shows `(832) 642-2893` as you type. New shared script `www/_phone_input.js` binds to every `input[type="tel"]` and to combined "Email or phone" inputs tagged with `data-phone-contact`. Included on register, walk-in, contacts, league (add member), profile settings, user edit, and admin settings pages.
-- **Server-side phone format docs.** Added a docblock to `normalize_phone()` in `db.php` documenting the canonical `XXX-XXX-XXXX` storage format and every input shape it accepts (`8326422893`, `832-642-2893`, `(832) 642-2893`, `832.642.2893`, `+1 (832) 642-2893`, `1-832-642-2893`). Defensive `trim()` added up front — callers already trim, but cheap belt-and-suspenders.
+- **Client-side phone auto-formatter.** Typing `xxxxxxxxxx` in any phone field now shows `(xxx) xxx-xxxx` as you type. New shared script `www/_phone_input.js` binds to every `input[type="tel"]` and to combined "Email or phone" inputs tagged with `data-phone-contact`. Included on register, walk-in, contacts, league (add member), profile settings, user edit, and admin settings pages.
+- **Server-side phone format docs.** Added a docblock to `normalize_phone()` in `db.php` documenting the canonical `XXX-XXX-XXXX` storage format and every input shape it accepts (`xxxxxxxxxx`, `xxx-xxx-xxxx`, `(xxx) xxx-xxxx`, `xxx.xxx.xxxx`, `+1 (xxx) xxx-xxxx`, `1-xxx-xxx-xxxx`). Defensive `trim()` added up front — callers already trim, but cheap belt-and-suspenders.
 
 ### Storage note (no change)
 - All phone numbers are stored in the canonical `XXX-XXX-XXXX` form in `users.phone`, `event_invites.phone`, `league_members.contact_phone`, and `user_contacts.contact_phone`. Every `WHERE phone = ?` lookup in the codebase compares against a `normalize_phone()`-d value, so regardless of input format, a phone-based login / lookup / dedup check succeeds.
@@ -504,7 +504,7 @@ All notable changes to GameNight are documented here.
 ## [v0.19001] — 2026-04-22
 
 ### Fixed
-- **Phone registration rejected valid US numbers.** `normalize_phone()` formats a 10-digit US number as `XXX-XXX-XXXX` (with dashes), but the new phone validators introduced in v0.19000 only accepted raw digits (`^\+?\d{7,15}$`). A user typing `8326422893` saw "Invalid phone number." Replaced the strict digit-only regex with "strip non-digits, count 7–15". Same fix applied in `register_user()`, `find_user_by_identifier()`, and `walkin.php` so lookups, signups, and walk-ins all accept formatted phones.
+- **Phone registration rejected valid US numbers.** `normalize_phone()` formats a 10-digit US number as `XXX-XXX-XXXX` (with dashes), but the new phone validators introduced in v0.19000 only accepted raw digits (`^\+?\d{7,15}$`). A user typing `xxxxxxxxxx` saw "Invalid phone number." Replaced the strict digit-only regex with "strip non-digits, count 7–15". Same fix applied in `register_user()`, `find_user_by_identifier()`, and `walkin.php` so lookups, signups, and walk-ins all accept formatted phones.
 
 ---
 
