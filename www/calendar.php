@@ -157,9 +157,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Title and start date are required.'];
         } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $sd) || ($ed && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $ed))) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid date format.'];
+        } elseif ($st !== null && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $st)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid time format.'];
+        } elseif ($et !== null && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $et)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid time format.'];
         } elseif ($__inv_count > MAX_INVITEES_PER_EVENT) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Too many invitees ('. $__inv_count .'). Limit is ' . MAX_INVITEES_PER_EVENT . ' per event.'];
         } else {
+            // Submitted date/time fields are in the host's viewer tz. Convert to site tz
+            // for storage so all consumers (notifications, calendar grid, sister sites) see
+            // a single canonical wall-clock. Date may roll over a day in extreme offsets.
+            $_viewer_tz_for_post = new DateTimeZone(display_timezone((int)$current['id']));
+            $_site_tz_for_post   = new DateTimeZone(get_setting('timezone', 'UTC'));
+            if ($_viewer_tz_for_post->getName() !== $_site_tz_for_post->getName()) {
+                $_sd_viewer = $sd; // capture original viewer-tz date for the end-time calc
+                if ($st !== null) {
+                    $_conv = form_datetime_to_site_tz($sd, $st, $_viewer_tz_for_post, $_site_tz_for_post);
+                    $sd = $_conv['date']; $st = $_conv['time'];
+                }
+                if ($et !== null) {
+                    $_end_date_in = $ed ?: $_sd_viewer; // user's intended end date in viewer tz
+                    $_conv = form_datetime_to_site_tz($_end_date_in, $et, $_viewer_tz_for_post, $_site_tz_for_post);
+                    $et = $_conv['time'];
+                    // Only persist end_date if it differs from the converted start date
+                    $ed = ($_conv['date'] !== $sd) ? $_conv['date'] : null;
+                }
+            }
+
             $suppress_notify = !empty($_POST['suppress_notify']);
             $is_poker = !empty($_POST['is_poker']) ? 1 : 0;
             if ($is_poker) require_once __DIR__ . '/_poker_helpers.php';
@@ -3173,8 +3197,8 @@ function openEditModal(ev) {
     document.getElementById('eId').value        = ev ? ev.id : '';
     document.getElementById('eOccDate').value   = '';
     document.getElementById('eTitle').value     = ev ? ev.title : '';
-    document.getElementById('eStartDate').value = ev ? ev.start_date : new Date().toLocaleDateString('en-CA');
-    setTimePicker(ev ? (ev.start_time || '') : '');
+    document.getElementById('eStartDate').value = ev ? (ev.start_date_input || ev.start_date) : new Date().toLocaleDateString('en-CA');
+    setTimePicker(ev ? (ev.start_time_input || ev.start_time || '') : '');
     document.getElementById('eDesc').value      = ev ? (ev.description || '') : '';
     // Show description section if event has one; collapse for new events
     var hasDesc = ev && ev.description && ev.description.trim() !== '';
@@ -3217,11 +3241,14 @@ function openEditModal(ev) {
     document.getElementById('eUserSearch').value = '';
     document.getElementById('eSubmitBtn').textContent = ev ? 'Save Changes' : 'Add Event';
 
-    // Pre-fill duration from start_time/end_time diff
+    // Pre-fill duration from start_time/end_time diff (use viewer-tz inputs so duration
+    // is computed against the same wall-clock values shown in the form).
     const dur = document.getElementById('eDuration');
-    if (ev && ev.start_time && ev.end_time) {
-        const [sh, sm] = ev.start_time.split(':').map(Number);
-        const [eh, em] = ev.end_time.split(':').map(Number);
+    const _st_in = ev ? (ev.start_time_input || ev.start_time) : '';
+    const _et_in = ev ? (ev.end_time_input   || ev.end_time)   : '';
+    if (ev && _st_in && _et_in) {
+        const [sh, sm] = _st_in.split(':').map(Number);
+        const [eh, em] = _et_in.split(':').map(Number);
         const diff = (eh * 60 + em) - (sh * 60 + sm);
         dur.value = diff > 0 ? (diff / 60) : '';
     } else {

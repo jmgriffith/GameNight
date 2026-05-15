@@ -1105,19 +1105,45 @@ function get_timezone_options(): array {
 function event_display_times(array $ev, DateTimeZone $site_tz, DateTimeZone $viewer_tz, ?string $occ_date = null): array {
     $ev['start_time_display'] = '';
     $ev['end_time_display']   = '';
+    // `_input` fields are the same instants formatted as Y-m-d / H:i so the edit form's
+    // <input type="date"> and <input type="time"> pre-fill in the viewer's tz.
+    // Defaults match the raw fields so the JS can fall through when no time is set.
+    $ev['start_date_input']   = $ev['start_date'] ?? null;
+    $ev['end_date_input']     = $ev['end_date']   ?? null;
+    $ev['start_time_input']   = !empty($ev['start_time']) ? substr($ev['start_time'], 0, 5) : null;
+    $ev['end_time_input']     = !empty($ev['end_time'])   ? substr($ev['end_time'],   0, 5) : null;
+
     $base_date = $occ_date ?: ($ev['start_date'] ?? null);
     if ($base_date && !empty($ev['start_time'])) {
         $dt = new DateTime($base_date . ' ' . $ev['start_time'], $site_tz);
         $dt->setTimezone($viewer_tz);
         $ev['start_time_display'] = $dt->format('g:ia');
+        $ev['start_time_input']   = $dt->format('H:i');
+        $ev['start_date_input']   = $dt->format('Y-m-d');
     }
     if ($base_date && !empty($ev['end_time'])) {
         $end_base = $ev['end_date'] ?: $base_date;
         $dt = new DateTime($end_base . ' ' . $ev['end_time'], $site_tz);
         $dt->setTimezone($viewer_tz);
         $ev['end_time_display'] = $dt->format('g:ia');
+        $ev['end_time_input']   = $dt->format('H:i');
+        $ev['end_date_input']   = $dt->format('Y-m-d');
     }
     return $ev;
+}
+
+/**
+ * Convert a (date, time) pair submitted by the form (in the viewer's tz) into the
+ * site-tz wall-clock equivalent for storage. Returns ['date' => 'Y-m-d', 'time' => 'H:i'].
+ * If $time is null or empty, returns the date untouched (all-day events have no tz).
+ */
+function form_datetime_to_site_tz(string $date, ?string $time, DateTimeZone $viewer_tz, DateTimeZone $site_tz): array {
+    if ($time === null || $time === '') {
+        return ['date' => $date, 'time' => null];
+    }
+    $dt = new DateTime($date . ' ' . $time, $viewer_tz);
+    $dt->setTimezone($site_tz);
+    return ['date' => $dt->format('Y-m-d'), 'time' => $dt->format('H:i')];
 }
 
 function display_timezone(?int $user_id = null): string {

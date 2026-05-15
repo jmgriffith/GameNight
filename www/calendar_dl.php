@@ -143,9 +143,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Title and start date are required.'];
         } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $sd) || ($ed && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $ed))) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid date format.'];
+        } elseif ($st !== null && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $st)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid time format.'];
+        } elseif ($et !== null && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $et)) {
+            $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Invalid time format.'];
         } elseif ($__inv_count > MAX_INVITEES_PER_EVENT) {
             $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Too many invitees ('. $__inv_count .'). Limit is ' . MAX_INVITEES_PER_EVENT . ' per event.'];
         } else {
+            // Submitted date/time in host's viewer tz → convert to site tz for storage.
+            $_viewer_tz_for_post = new DateTimeZone(display_timezone((int)$current['id']));
+            $_site_tz_for_post   = new DateTimeZone(get_setting('timezone', 'UTC'));
+            if ($_viewer_tz_for_post->getName() !== $_site_tz_for_post->getName()) {
+                $_sd_viewer = $sd;
+                if ($st !== null) {
+                    $_conv = form_datetime_to_site_tz($sd, $st, $_viewer_tz_for_post, $_site_tz_for_post);
+                    $sd = $_conv['date']; $st = $_conv['time'];
+                }
+                if ($et !== null) {
+                    $_end_date_in = $ed ?: $_sd_viewer;
+                    $_conv = form_datetime_to_site_tz($_end_date_in, $et, $_viewer_tz_for_post, $_site_tz_for_post);
+                    $et = $_conv['time'];
+                    $ed = ($_conv['date'] !== $sd) ? $_conv['date'] : null;
+                }
+            }
             if ($action === 'add') {
                 $db->prepare('INSERT INTO events (title, description, start_date, end_date, start_time, end_time, color, recurrence, recurrence_end, created_by, requires_approval, league_id, visibility, is_poker, rsvp_deadline_hours, waitlist_enabled, reminders_enabled, reminder_offsets)
                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -2149,10 +2169,10 @@ function openEditModal(ev) {
     document.getElementById('eAction').value    = 'edit';
     document.getElementById('eId').value        = ev.id;
     document.getElementById('eTitle').value     = ev.title;
-    document.getElementById('eStartDate').value = ev.start_date;
-    document.getElementById('eEndDate').value   = ev.end_date || '';
-    document.getElementById('eStartTime').value = ev.start_time || '';
-    document.getElementById('eEndTime').value   = ev.end_time || '';
+    document.getElementById('eStartDate').value = ev.start_date_input || ev.start_date;
+    document.getElementById('eEndDate').value   = ev.end_date_input   || ev.end_date   || '';
+    document.getElementById('eStartTime').value = ev.start_time_input || ev.start_time || '';
+    document.getElementById('eEndTime').value   = ev.end_time_input   || ev.end_time   || '';
     document.getElementById('eDesc').value      = ev.description || '';
     document.getElementById('eRecurrence').value  = ev.recurrence || 'none';
     document.getElementById('eRecEnd').value      = ev.recurrence_end || '';
