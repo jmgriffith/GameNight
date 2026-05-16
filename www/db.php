@@ -476,6 +476,47 @@ function db_init(PDO $pdo): void {
     try { $pdo->exec("ALTER TABLE timer_state ADD COLUMN alarm_sound TEXT"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE timer_state ADD COLUMN start_sound TEXT"); } catch (Exception $e) {}
     try { $pdo->exec("ALTER TABLE timer_state ADD COLUMN warning_sound TEXT"); } catch (Exception $e) {}
+    try { $pdo->exec("ALTER TABLE timer_state ADD COLUMN theme_id INTEGER"); } catch (Exception $e) {}
+
+    // Timer themes (visual customization of the timer screen). Scope mirrors blind_presets:
+    // personal / league / global / default. Properties stored as a JSON blob so the schema
+    // can evolve (new themable props) without ALTERs.
+    try { $pdo->exec("CREATE TABLE IF NOT EXISTS timer_themes (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
+        created_by  INTEGER NOT NULL DEFAULT 0,
+        is_default  INTEGER NOT NULL DEFAULT 0,
+        is_global   INTEGER NOT NULL DEFAULT 0,
+        league_id   INTEGER,
+        properties  TEXT NOT NULL DEFAULT '{}',
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    )"); } catch (Exception $e) {}
+
+    try {
+        $has = (int)$pdo->query("SELECT COUNT(*) FROM timer_themes")->fetchColumn();
+        if ($has === 0) {
+            $defaultProps = [
+                'background' => ['type'=>'color','color'=>'#0f172a','gradient'=>['from'=>'#0f172a','to'=>'#1e293b','angle'=>180],'image_url'=>''],
+                'elements'   => [
+                    'event_name'   => ['visible'=>true,'color'=>'#ffffff','scale'=>1.0],
+                    'player_count' => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+                    'pool_total'   => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+                    'level_label'  => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+                    'blinds'       => ['visible'=>true,'color'=>'#ffffff','scale'=>1.0],
+                    'clock'        => ['visible'=>true,'color_green'=>'#22c55e','color_yellow'=>'#fbbf24','color_red'=>'#ef4444','scale'=>1.0,'warning_seconds'=>120,'critical_seconds'=>30],
+                    'paused_label' => ['visible'=>true,'color'=>'#fbbf24','scale'=>1.0],
+                    'next_level'   => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+                    'avg_stack'    => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+                    'payouts'      => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+                    'qr'           => ['visible'=>true,'scale'=>1.0],
+                    'image'        => ['visible'=>false,'url'=>'','scale'=>1.0],
+                ],
+                'tray' => ['bg_color'=>'#1e293b','button_color'=>'#e2e8f0','accent_color'=>'#2563eb'],
+            ];
+            $stmt = $pdo->prepare("INSERT INTO timer_themes (name, created_by, is_default, is_global, properties) VALUES ('Classic Dark', 0, 1, 1, ?)");
+            $stmt->execute([json_encode($defaultProps)]);
+        }
+    } catch (Exception $e) {}
 
     // Walk-up QR registration token per event
     try { $pdo->exec("ALTER TABLE events ADD COLUMN walkin_token TEXT"); } catch (Exception $e) {}

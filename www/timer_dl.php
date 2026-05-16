@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/_poker_helpers.php';
+require_once __DIR__ . '/_timer_theme.php';
 
 header('Content-Type: application/json');
 
@@ -155,6 +156,8 @@ if ($action === 'get_state') {
         }
     }
 
+    $themeProps = timer_resolve_theme($db, (int)($timer['theme_id'] ?? 0) ?: null);
+
     echo json_encode([
         'ok' => true,
         'timer' => $live,
@@ -171,6 +174,10 @@ if ($action === 'get_state') {
             'alarm_sound' => $timer['alarm_sound'] ?? null,
             'start_sound' => $timer['start_sound'] ?? null,
             'warning_sound' => $timer['warning_sound'] ?? null,
+        ],
+        'theme' => [
+            'id' => (int)($timer['theme_id'] ?? 0) ?: null,
+            'properties' => $themeProps,
         ],
     ]);
     exit;
@@ -561,6 +568,234 @@ if ($action === 'upload_sound') {
     }
 
     echo json_encode(['ok' => true, 'url' => '/uploads/' . $name]);
+    exit;
+}
+
+// ─── Theme system ─────────────────────────────────────────
+// Mirrors the blind-preset save/load/scope model exactly. Themes are JSON blobs in
+// `timer_themes.properties`; timer_state.theme_id points at the active row.
+
+// ─── GET: get_themes ──────────────────────────────────────
+if ($action === 'get_themes') {
+    $stmt = $db->prepare(
+        'SELECT tt.id, tt.name, tt.is_default, tt.is_global, tt.created_by, tt.league_id, l.name AS league_name
+         FROM timer_themes tt
+         LEFT JOIN leagues l ON l.id = tt.league_id
+         WHERE tt.is_default = 1
+            OR tt.is_global  = 1
+            OR tt.created_by = ?
+            OR tt.league_id IN (SELECT league_id FROM league_members WHERE user_id = ?)
+         ORDER BY tt.is_default DESC, tt.is_global DESC, LOWER(tt.name)'
+    );
+    $stmt->execute([$current['id'], $current['id']]);
+    echo json_encode(['ok' => true, 'themes' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+    exit;
+}
+
+// ─── POST: load_theme ─────────────────────────────────────
+if ($action === 'load_theme') {
+    $timer = resolve_timer_from_post($db, $current, $isAdmin);
+    if (!$timer) { echo json_encode(['ok' => false, 'error' => 'Timer not found']); exit; }
+    $theme_id = (int)($_POST['theme_id'] ?? 0);
+
+    $t = $db->prepare('SELECT id, properties FROM timer_themes WHERE id = ?');
+    $t->execute([$theme_id]);
+    $themeRow = $t->fetch();
+    if (!$themeRow) { echo json_encode(['ok' => false, 'error' => 'Theme not found']); exit; }
+
+    $db->prepare("UPDATE timer_state SET theme_id = ?, updated_at = datetime('now') WHERE id = ?")
+        ->execute([$theme_id, $timer['id']]);
+
+    $props = json_decode($themeRow['properties'] ?? '{}', true) ?: [];
+    $merged = array_replace_recursive(timer_theme_defaults(), $props);
+    echo json_encode(['ok' => true, 'theme_id' => $theme_id, 'properties' => $merged]);
+    exit;
+}
+
+// ─── POST: save_theme (creates a new theme row) ───────────
+if ($action === 'save_theme') {
+    if (!$current) { echo json_encode(['ok' => false, 'error' => 'Login required']); exit; }
+    $name = trim($_POST['name'] ?? '');
+    $properties = $_POST['properties'] ?? '';
+    $is_global = !empty($_POST['is_global']) ? 1 : 0;
+    $req_league_id = (int)($_POST['league_id'] ?? 0) ?: null;
+
+    $props = json_decode($properties, true);
+    if (!$name || !is_array($props)) {
+        echo json_encode(['ok' => false, 'error' => 'Name and properties required']);
+        exit;
+    }
+    if ($is_global && !$isAdmin) {
+        echo json_encode(['ok' => false, 'error' => 'Only admins can save global themes']);
+        exit;
+    }
+    $league_id = null;
+    if ($req_league_id) {
+        $role = league_role($req_league_id, (int)$current['id']);
+        if (!$isAdmin && !in_array($role, ['owner', 'manager'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'You must be an owner or manager of that league.']);
+            exit;
+        }
+        $league_id = $req_league_id;
+        $is_global = 0;
+    }
+
+    $db->prepare('INSERT INTO timer_themes (name, created_by, is_global, league_id, properties) VALUES (?, ?, ?, ?, ?)')
+       ->execute([$name, $current['id'], $is_global, $league_id, json_encode($props)]);
+    $tid = (int)$db->lastInsertId();
+
+    // Point the current timer at the newly-saved theme.
+    $timer = resolve_timer_from_post($db, $current, $isAdmin);
+    if ($timer) {
+        $db->prepare("UPDATE timer_state SET theme_id = ?, updated_at = datetime('now') WHERE id = ?")
+            ->execute([$tid, $timer['id']]);
+    }
+
+    echo json_encode(['ok' => true, 'theme_id' => $tid]);
+    exit;
+}
+
+// ─── POST: update_theme (writes properties back to the loaded theme; copy-on-edit) ──
+if ($action === 'update_theme') {
+    if (!$current) { echo json_encode(['ok' => false, 'error' => 'Login required']); exit; }
+    $timer = resolve_timer_from_post($db, $current, $isAdmin);
+    if (!$timer) { echo json_encode(['ok' => false, 'error' => 'Timer not found']); exit; }
+    $props = json_decode($_POST['properties'] ?? '', true);
+    if (!is_array($props)) {
+        echo json_encode(['ok' => false, 'error' => 'Properties required']);
+        exit;
+    }
+    $theme_id = (int)($timer['theme_id'] ?? 0);
+    if (!$theme_id) {
+        echo json_encode(['ok' => false, 'error' => 'No theme loaded']);
+        exit;
+    }
+
+    $tc = $db->prepare('SELECT is_default, is_global, created_by, league_id FROM timer_themes WHERE id = ?');
+    $tc->execute([$theme_id]);
+    $themeRow = $tc->fetch();
+    if (!$themeRow) { echo json_encode(['ok' => false, 'error' => 'Theme not found']); exit; }
+
+    $is_protected     = (int)($themeRow['is_default'] ?? 0) || (int)($themeRow['is_global'] ?? 0);
+    $theme_league_id  = (int)($themeRow['league_id'] ?? 0);
+    $can_edit_league  = false;
+    if ($theme_league_id > 0) {
+        $role = league_role($theme_league_id, (int)$current['id']);
+        $can_edit_league = in_array($role, ['owner', 'manager'], true);
+    }
+
+    $created_copy = false;
+    if ($is_protected && !$isAdmin) {
+        $db->prepare('INSERT INTO timer_themes (name, created_by, properties) VALUES (?, ?, ?)')
+           ->execute(['Custom', $current['id'], json_encode($props)]);
+        $theme_id = (int)$db->lastInsertId();
+        $db->prepare("UPDATE timer_state SET theme_id = ?, updated_at = datetime('now') WHERE id = ?")
+           ->execute([$theme_id, $timer['id']]);
+        $created_copy = true;
+    } elseif ($theme_league_id > 0 && !$isAdmin && !$can_edit_league) {
+        $db->prepare('INSERT INTO timer_themes (name, created_by, properties) VALUES (?, ?, ?)')
+           ->execute(['Custom', $current['id'], json_encode($props)]);
+        $theme_id = (int)$db->lastInsertId();
+        $db->prepare("UPDATE timer_state SET theme_id = ?, updated_at = datetime('now') WHERE id = ?")
+           ->execute([$theme_id, $timer['id']]);
+        $created_copy = true;
+    } else {
+        $db->prepare('UPDATE timer_themes SET properties = ? WHERE id = ?')
+           ->execute([json_encode($props), $theme_id]);
+    }
+
+    echo json_encode(['ok' => true, 'theme_id' => $theme_id, 'created_copy' => $created_copy]);
+    exit;
+}
+
+// ─── POST: delete_theme ───────────────────────────────────
+if ($action === 'delete_theme') {
+    if (!$current) { echo json_encode(['ok' => false, 'error' => 'Login required']); exit; }
+    $theme_id = (int)($_POST['theme_id'] ?? 0);
+    $t = $db->prepare('SELECT * FROM timer_themes WHERE id = ?');
+    $t->execute([$theme_id]);
+    $themeRow = $t->fetch();
+    if (!$themeRow) { echo json_encode(['ok' => false, 'error' => 'Not found']); exit; }
+    if ((int)$themeRow['is_default']) { echo json_encode(['ok' => false, 'error' => 'Cannot delete default']); exit; }
+    if ((int)($themeRow['is_global'] ?? 0) && !$isAdmin) {
+        echo json_encode(['ok' => false, 'error' => 'Only admins can delete global themes']); exit;
+    }
+    $theme_league_id = (int)($themeRow['league_id'] ?? 0);
+    if ($theme_league_id > 0) {
+        $role = league_role($theme_league_id, (int)$current['id']);
+        if (!$isAdmin && !in_array($role, ['owner', 'manager'], true)) {
+            echo json_encode(['ok' => false, 'error' => 'Only league owners or managers can delete this theme.']); exit;
+        }
+    } elseif ((int)$themeRow['created_by'] !== (int)$current['id'] && !$isAdmin) {
+        echo json_encode(['ok' => false, 'error' => 'Access denied']); exit;
+    }
+
+    // If the deleted theme used an uploaded background image and no other theme references it,
+    // unlink the file to keep uploads/ from accumulating dead assets.
+    $props = json_decode($themeRow['properties'] ?? '{}', true) ?: [];
+    $img = $props['background']['image_url'] ?? '';
+    if ($img && strpos($img, '/uploads/timer_bg/') === 0) {
+        $needle = '%' . str_replace(['%','_'], ['\\%','\\_'], $img) . '%';
+        $st = $db->prepare("SELECT COUNT(*) FROM timer_themes WHERE id != ? AND properties LIKE ? ESCAPE '\\'");
+        $st->execute([$theme_id, $needle]);
+        if ((int)$st->fetchColumn() === 0) {
+            $abs = __DIR__ . $img;
+            if (is_file($abs) && strpos(realpath($abs) ?: '', __DIR__ . '/uploads/timer_bg/') === 0) {
+                @unlink($abs);
+            }
+        }
+    }
+
+    $db->prepare('DELETE FROM timer_themes WHERE id = ?')->execute([$theme_id]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ─── POST: set_default_theme (admin only) ─────────────────
+if ($action === 'set_default_theme') {
+    if (!$isAdmin) { echo json_encode(['ok' => false, 'error' => 'Admin only']); exit; }
+    $theme_id = (int)($_POST['theme_id'] ?? 0);
+    $t = $db->prepare('SELECT id FROM timer_themes WHERE id = ?');
+    $t->execute([$theme_id]);
+    if (!$t->fetch()) { echo json_encode(['ok' => false, 'error' => 'Theme not found']); exit; }
+    $db->prepare('UPDATE timer_themes SET is_default = 0 WHERE is_default = 1')->execute();
+    $db->prepare('UPDATE timer_themes SET is_default = 1, is_global = 1 WHERE id = ?')->execute([$theme_id]);
+    echo json_encode(['ok' => true]);
+    exit;
+}
+
+// ─── POST: upload_theme_bg (background image upload) ──────
+if ($action === 'upload_theme_bg') {
+    if (!$current) { echo json_encode(['ok' => false, 'error' => 'Login required']); exit; }
+
+    $file = $_FILES['image'] ?? null;
+    if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['ok' => false, 'error' => 'No file uploaded']); exit;
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime  = $finfo->file($file['tmp_name']);
+    $allowed = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/webp' => 'webp',
+        'image/gif'  => 'gif',
+    ];
+    if (!isset($allowed[$mime])) {
+        echo json_encode(['ok' => false, 'error' => 'Only JPEG, PNG, WebP, or GIF images allowed']); exit;
+    }
+    if ($file['size'] > 8 * 1024 * 1024) {
+        echo json_encode(['ok' => false, 'error' => 'File too large (max 8 MB)']); exit;
+    }
+
+    $dir = __DIR__ . '/uploads/timer_bg/';
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    $name = 'bg_' . bin2hex(random_bytes(8)) . '.' . $allowed[$mime];
+    if (!move_uploaded_file($file['tmp_name'], $dir . $name)) {
+        echo json_encode(['ok' => false, 'error' => 'Failed to save file']); exit;
+    }
+
+    echo json_encode(['ok' => true, 'url' => '/uploads/timer_bg/' . $name]);
     exit;
 }
 

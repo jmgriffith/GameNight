@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/_poker_helpers.php';
+require_once __DIR__ . '/_timer_theme.php';
 
 $db = get_db();
 $site_name = get_setting('site_name', 'Game Night');
@@ -183,6 +184,11 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
     $elapsed = time() - strtotime($timer['updated_at']);
     $remaining = max(0, $remaining - $elapsed);
 }
+
+// Resolve active theme for first-paint CSS variables + JS state.
+$themeId   = (int)($timer['theme_id'] ?? 0) ?: null;
+$themeProps = timer_resolve_theme($db, $themeId);
+$themeCss   = timer_theme_css_vars($themeProps);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -192,10 +198,39 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
     <title>Poker Timer &mdash; <?= htmlspecialchars($site_name) ?></title>
     <link rel="icon" href="/favicon.php">
     <link rel="stylesheet" href="/style.css">
+    <script>window.TIMER_THEME = <?= json_encode($themeProps, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>; window.TIMER_THEME_ID = <?= $themeId ? (int)$themeId : 'null' ?>;</script>
+    <style id="themeStyle"><?= $themeCss ?></style>
     <style>
         html { height: 100%; }
+        :root {
+            --timer-bg: #0f172a;
+            --timer-event-color: #fff;
+            --timer-stat-color: #94a3b8;
+            --timer-stat-strong: #e2e8f0;
+            --timer-level-color: #94a3b8;
+            --timer-blinds-color: #fff;
+            --timer-ante-color: #f59e0b;
+            --timer-clock-green: #22c55e;
+            --timer-clock-yellow: #fbbf24;
+            --timer-clock-red: #ef4444;
+            --timer-paused-color: #fbbf24;
+            --timer-next-color: #94a3b8;
+            --timer-avgstack-color: #94a3b8;
+            --timer-payouts-color: #94a3b8;
+            --timer-tray-bg: rgba(15, 23, 42, 0.88);
+            --timer-tray-border: rgba(71, 85, 105, 0.4);
+            --timer-tray-button-bg: #1e293b;
+            --timer-tray-button-color: #e2e8f0;
+            --timer-accent: #2563eb;
+            --timer-event-scale: 1;
+            --timer-level-scale: 1;
+            --timer-blinds-scale: 1;
+            --timer-clock-scale: 1;
+            --timer-next-scale: 1;
+            --timer-paused-scale: 1;
+        }
         .timer-body {
-            background: #0f172a;
+            background: var(--timer-bg);
             color: #e2e8f0;
             margin: 0;
             height: 100dvh;
@@ -240,12 +275,12 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
         }
         .timer-event-name {
             font-weight: 700;
-            font-size: clamp(1rem, 2.5vw, 1.5rem) !important;
+            font-size: calc(clamp(1rem, 2.5vw, 1.5rem) * var(--timer-event-scale)) !important;
             opacity: 1 !important;
-            color: #fff;
+            color: var(--timer-event-color);
         }
-        .timer-stat { color: #94a3b8; }
-        .timer-stat b { color: #e2e8f0; font-size: 110%; }
+        .timer-stat { color: var(--timer-stat-color); }
+        .timer-stat b { color: var(--timer-stat-strong); font-size: 110%; }
 
         /* ── Main display ── */
         .timer-display {
@@ -260,38 +295,38 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             overflow: hidden;
         }
         .timer-level-label {
-            font-size: clamp(0.9rem, 3vw, 2.5rem);
+            font-size: calc(clamp(0.9rem, 3vw, 2.5rem) * var(--timer-level-scale));
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.15em;
-            color: #94a3b8;
+            color: var(--timer-level-color);
         }
         .timer-blinds {
-            font-size: clamp(2rem, 10vw, 10rem);
+            font-size: calc(clamp(2rem, 10vw, 10rem) * var(--timer-blinds-scale));
             font-weight: 800;
-            color: #fff;
+            color: var(--timer-blinds-color);
             line-height: 1.1;
             font-variant-numeric: tabular-nums;
         }
         .timer-ante {
             font-size: clamp(1rem, 2.5vw, 2.2rem);
-            color: #f59e0b;
+            color: var(--timer-ante-color);
             font-weight: 700;
         }
         .timer-clock {
-            font-size: min(25vw, 35vh);
+            font-size: calc(min(25vw, 35vh) * var(--timer-clock-scale));
             font-weight: 800;
             font-variant-numeric: tabular-nums;
             line-height: 1;
             margin: 0;
             transition: color 0.3s;
         }
-        .timer-green { color: #22c55e; }
-        .timer-yellow { color: #fbbf24; }
-        .timer-red { color: #ef4444; animation: pulse 1s ease-in-out infinite; }
+        .timer-green { color: var(--timer-clock-green); }
+        .timer-yellow { color: var(--timer-clock-yellow); }
+        .timer-red { color: var(--timer-clock-red); animation: pulse 1s ease-in-out infinite; }
         .timer-paused-label {
-            font-size: clamp(0.8rem, 2vw, 1.8rem);
-            color: #fbbf24;
+            font-size: calc(clamp(0.8rem, 2vw, 1.8rem) * var(--timer-paused-scale));
+            color: var(--timer-paused-color);
             font-weight: 600;
             letter-spacing: 0.2em;
             text-transform: uppercase;
@@ -302,8 +337,8 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             50% { opacity: 0.5; }
         }
         .timer-next {
-            font-size: clamp(1.3rem, 3.5vw, 2.5rem);
-            color: #94a3b8;
+            font-size: calc(clamp(1.3rem, 3.5vw, 2.5rem) * var(--timer-next-scale));
+            color: var(--timer-next-color);
             font-weight: 600;
         }
 
@@ -327,12 +362,12 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             width: auto;
             max-width: 95vw;
             z-index: 50;
-            background: rgba(15, 23, 42, 0.88);
+            background: var(--timer-tray-bg);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border-radius: 14px 14px 0 0;
             padding: 0.4rem 0.75rem;
-            border: 1px solid rgba(71, 85, 105, 0.4);
+            border: 1px solid var(--timer-tray-border);
             border-bottom: none;
             transition: transform 0.3s ease, opacity 0.3s ease;
         }
@@ -371,8 +406,8 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
         .timer-primary-controls button,
         .timer-tray-grid button,
         .timer-controls button {
-            background: #1e293b;
-            color: #e2e8f0;
+            background: var(--timer-tray-button-bg);
+            color: var(--timer-tray-button-color);
             border: 1px solid #334155;
             border-radius: 8px;
             padding: 0.6rem 1.2rem;
@@ -490,7 +525,7 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             padding: 0.5rem 0.75rem;
             font-size: clamp(0.7rem, 1.2vw, 0.9rem);
             line-height: 1.6;
-            color: #94a3b8;
+            color: var(--timer-payouts-color);
             z-index: 10;
         }
         .timer-payouts-title {
@@ -517,7 +552,7 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             padding: 0.5rem 0.75rem;
             font-size: clamp(0.7rem, 1.2vw, 0.9rem);
             line-height: 1.6;
-            color: #94a3b8;
+            color: var(--timer-avgstack-color);
             z-index: 10;
         }
         .timer-avgstack-title {
@@ -640,11 +675,11 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
         }
         .timer-level-btns button:hover { background: #475569; }
         .timer-level-btns button.btn-save {
-            background: #2563eb;
-            border-color: #2563eb;
+            background: var(--timer-accent);
+            border-color: var(--timer-accent);
             color: #fff;
         }
-        .timer-level-btns button.btn-save:hover { background: #1d4ed8; }
+        .timer-level-btns button.btn-save:hover { filter: brightness(0.9); }
         .timer-level-btns button.btn-close-panel {
             background: #64748b;
             border-color: #64748b;
@@ -665,9 +700,9 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             .timer-primary-controls button.btn-play, .timer-controls button.btn-play {
                 padding: 0.4rem 1rem;
             }
-            .timer-blinds { font-size: clamp(2rem, 9vw, 6rem); }
-            .timer-clock { font-size: min(22vw, 30vh); }
-            .timer-level-label { font-size: clamp(0.9rem, 2.5vw, 1.5rem); }
+            .timer-blinds { font-size: calc(clamp(2rem, 9vw, 6rem) * var(--timer-blinds-scale)); }
+            .timer-clock { font-size: calc(min(22vw, 30vh) * var(--timer-clock-scale)); }
+            .timer-level-label { font-size: calc(clamp(0.9rem, 2.5vw, 1.5rem) * var(--timer-level-scale)); }
         }
         @media (max-width: 500px) {
             .timer-primary-controls button, .timer-tray-grid button, .timer-controls button {
@@ -684,12 +719,12 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             .timer-container { padding: 0.25rem 0.5rem; }
             .timer-info-bar { padding: 0.15rem 0.5rem; gap: 1rem; }
             .timer-info-bar > span { font-size: 0.8rem; }
-            .timer-level-label { font-size: 1rem; }
-            .timer-blinds { font-size: clamp(1.5rem, 6vw, 3rem); }
+            .timer-level-label { font-size: calc(1rem * var(--timer-level-scale)); }
+            .timer-blinds { font-size: calc(clamp(1.5rem, 6vw, 3rem) * var(--timer-blinds-scale)); }
             .timer-ante { font-size: 0.85rem; }
-            .timer-clock { font-size: min(20vw, 25vh); }
+            .timer-clock { font-size: calc(min(20vw, 25vh) * var(--timer-clock-scale)); }
             .timer-paused-label { font-size: 0.9rem; min-height: 1.2em; }
-            .timer-next { font-size: 1.1rem; }
+            .timer-next { font-size: calc(1.1rem * var(--timer-next-scale)); }
             .timer-primary-controls, .timer-tray-grid { padding: 0.2rem 0; gap: 0.25rem; }
             .timer-primary-controls button, .timer-tray-grid button, .timer-controls button { padding: 0.3rem 0.5rem; font-size: 0.7rem; }
             .timer-primary-controls button.btn-play, .timer-controls button.btn-play { padding: 0.3rem 0.8rem; }
@@ -755,16 +790,227 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
         body.display-mode .player-panel-overlay { display: none !important; }
 
         body.display-mode .timer-container { padding: 1rem 2rem; }
-        body.display-mode .timer-level-label { font-size: clamp(2rem, 4vw, 4rem); }
-        body.display-mode .timer-blinds { font-size: clamp(3rem, 12vw, 12rem); }
-        body.display-mode .timer-clock { font-size: min(30vw, 45vh); }
-        body.display-mode .timer-next { font-size: clamp(1.8rem, 4vw, 4rem); }
+        body.display-mode .timer-level-label { font-size: calc(clamp(2rem, 4vw, 4rem) * var(--timer-level-scale)); }
+        body.display-mode .timer-blinds { font-size: calc(clamp(3rem, 12vw, 12rem) * var(--timer-blinds-scale)); }
+        body.display-mode .timer-clock { font-size: calc(min(30vw, 45vh) * var(--timer-clock-scale)); }
+        body.display-mode .timer-next { font-size: calc(clamp(1.8rem, 4vw, 4rem) * var(--timer-next-scale)); }
         body.display-mode .timer-ante { font-size: clamp(1.5rem, 3vw, 3rem); }
         body.display-mode .timer-paused-label { font-size: clamp(2rem, 4vw, 3.5rem); }
         body.display-mode .timer-info-bar { font-size: clamp(1.2rem, 2.5vw, 2.2rem); padding: 0.75rem 2rem; gap: 2rem; }
+
+        /* ── Free-form layout editing ── */
+        /* Elements with an explicit theme position get pulled out of flow and pinned to the
+           viewport. --pos-x/--pos-y are percentages of viewport width/height; the element's
+           CENTER lands on that point (so the chosen anchor matches what the user sees while dragging). */
+        .timer-positioned {
+            position: fixed;
+            left: var(--pos-x, 50%);
+            top:  var(--pos-y, 50%);
+            right: auto;
+            bottom: auto;
+            transform: translate(-50%, -50%);
+            margin: 0;
+            z-index: 20;
+            white-space: nowrap;
+        }
+        /* QR keeps its current size unless theme overrides; transform stacks translate+scale. */
+        #qrWrap.timer-positioned {
+            transform: translate(-50%, -50%) scale(var(--timer-qr-scale, 1));
+            transform-origin: center;
+        }
+        /* Themable image: defaults centered and constrained, scaled via transform. */
+        .timer-image {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            max-width: 40vmin;
+            max-height: 40vmin;
+            object-fit: contain;
+            z-index: 5;
+            user-select: none;
+            pointer-events: auto;
+        }
+        #themeImage.timer-positioned {
+            transform: translate(-50%, -50%) scale(var(--timer-image-scale, 1));
+            transform-origin: center;
+            z-index: 4;  /* sit behind the text layer (z 20); above page bg */
+        }
+        /* Center guides shown only in layout-edit mode. Subtle by default; brighten when
+           an element snaps to them mid-drag. */
+        .center-guide-v, .center-guide-h {
+            position: fixed;
+            background: rgba(251, 191, 36, 0.18);
+            pointer-events: none;
+            z-index: 5;
+            display: none;
+        }
+        body.layout-edit .center-guide-v,
+        body.layout-edit .center-guide-h { display: block; }
+        .center-guide-v { top: 0; bottom: 0; left: 50%; width: 1px; }
+        .center-guide-h { left: 0; right: 0; top: 50%; height: 1px; }
+        .center-guide-v.is-snapping,
+        .center-guide-h.is-snapping {
+            background: rgba(251, 191, 36, 0.95);
+            box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+        }
+        body.layout-edit { user-select: none; -webkit-user-select: none; }
+        body.layout-edit .timer-positioned,
+        body.layout-edit .layout-draggable {
+            outline: 2px dashed #fbbf24;
+            outline-offset: 4px;
+            cursor: grab;
+        }
+        body.layout-edit .timer-positioned:active,
+        body.layout-edit .layout-draggable:active { cursor: grabbing; }
+        body.layout-edit .timer-tray,
+        body.layout-edit .timer-back { display: none !important; }
+        .layout-edit-pill {
+            position: fixed;
+            top: 1rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999;
+            background: rgba(15, 23, 42, 0.95);
+            border: 1px solid #475569;
+            border-radius: 999px;
+            padding: 0.35rem 0.65rem;
+            display: none;
+            gap: 0.4rem;
+            align-items: center;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+        }
+        body.layout-edit .layout-edit-pill { display: inline-flex; }
+        .layout-edit-pill button {
+            background: #1e293b;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 999px;
+            padding: 0.35rem 0.75rem;
+            font-size: 0.85rem;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .layout-edit-pill button:hover { background: #334155; }
+        .layout-edit-pill button.btn-done { background: #2563eb; border-color: #2563eb; color: #fff; }
+        .layout-edit-pill button.btn-danger { color: #ef4444; }
+        .layout-edit-pill .pill-handle {
+            cursor: grab;
+            color: #64748b;
+            padding: 0.25rem 0.4rem;
+            font-size: 1rem;
+            user-select: none;
+            line-height: 1;
+        }
+        .layout-edit-pill .pill-handle:active { cursor: grabbing; }
+        .layout-edit-pill .pill-sep { width: 1px; align-self: stretch; background: #334155; margin: 0 0.15rem; }
+
+        /* Per-element eye icon overlay (visible when in edit mode) */
+        .layout-eye {
+            position: absolute;
+            top: -1.4rem;
+            left: -0.2rem;
+            background: rgba(15, 23, 42, 0.95);
+            color: #fbbf24;
+            border: 1px solid #fbbf24;
+            border-radius: 999px;
+            width: 1.5rem;
+            height: 1.5rem;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.75rem;
+            line-height: 1;
+            z-index: 25;
+            user-select: none;
+            transition: transform 0.1s;
+        }
+        .layout-eye:hover { transform: scale(1.25); }
+        .layout-eye.is-hidden { color: #64748b; border-color: #64748b; }
+        body.layout-edit .timer-positioned .layout-eye { display: inline-flex; }
+        /* Selected element gets a different (solid blue) outline. */
+        body.layout-edit .timer-positioned.is-selected {
+            outline: 3px solid #2563eb;
+            outline-offset: 4px;
+        }
+
+        /* Inspector panel — properties for the currently selected element */
+        .layout-inspector {
+            position: fixed;
+            top: 4.5rem;
+            right: 1rem;
+            z-index: 998;
+            width: 260px;
+            background: rgba(15, 23, 42, 0.97);
+            border: 1px solid #475569;
+            border-radius: 12px;
+            color: #e2e8f0;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        body.layout-edit .layout-inspector.is-open { display: flex; }
+        .layout-inspector-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0.75rem;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            border-radius: 12px 12px 0 0;
+            cursor: grab;
+            user-select: none;
+        }
+        .layout-inspector-header:active { cursor: grabbing; }
+        .layout-inspector-header h4 { margin: 0; font-size: 0.9rem; color: #fff; font-weight: 600; }
+        .layout-inspector-close {
+            background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; padding: 0 0.25rem; line-height: 1;
+        }
+        .layout-inspector-body {
+            padding: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.6rem;
+            font-size: 0.85rem;
+        }
+        .layout-inspector-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+        .layout-inspector-row label { color: #cbd5e1; }
+        .layout-inspector-row input[type="color"] { width: 2rem; height: 2rem; padding: 0; border: 1px solid #334155; background: transparent; cursor: pointer; border-radius: 6px; }
+        .layout-inspector-row .ins-btn {
+            background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px;
+            padding: 0.2rem 0.55rem; cursor: pointer; font-size: 0.85rem;
+        }
+        .layout-inspector-row .ins-btn:hover { background: #475569; }
+        .layout-inspector-row .ins-scale { min-width: 3rem; text-align: center; color: #94a3b8; font-size: 0.8rem; }
     </style>
 </head>
 <body class="timer-body<?= $is_display ? ' display-mode' : '' ?>">
+
+<?php if (!$is_remote && !$is_guest): ?>
+<!-- Center guides (visible while in layout-edit mode). -->
+<div class="center-guide-v" id="centerGuideV"></div>
+<div class="center-guide-h" id="centerGuideH"></div>
+
+<!-- Floating control while in free-form layout edit mode (draggable). -->
+<div class="layout-edit-pill" id="layoutEditPill">
+    <span class="pill-handle" id="pillHandle" title="Drag to move toolbar">&#9776;</span>
+    <button type="button" onclick="openThemes()" title="Load / save themes">&#128218; Library</button>
+    <button class="btn-done" type="button" onclick="exitLayoutEdit(true)">&#10003; Save</button>
+    <button type="button" onclick="resetPositions()" title="Snap elements back to default positions">&#8635; Reset</button>
+    <span class="pill-sep"></span>
+    <button class="btn-danger" type="button" onclick="exitLayoutEdit(false)">&times; Cancel</button>
+</div>
+
+<!-- Inspector for the selected element (draggable). -->
+<div class="layout-inspector" id="layoutInspector">
+    <div class="layout-inspector-header" id="inspectorHeader">
+        <h4 id="inspectorTitle">Element</h4>
+        <button class="layout-inspector-close" type="button" onclick="closeInspector()" title="Close">&times;</button>
+    </div>
+    <div class="layout-inspector-body" id="inspectorBody"></div>
+</div>
+<?php endif; ?>
 
 <!-- Wake lock status (auto-hides) -->
 <div id="wakeBanner" style="position:fixed;bottom:0;left:0;right:0;background:#1e293b;color:#fbbf24;text-align:center;padding:6px;font-size:0.8rem;z-index:999;border-top:1px solid #334155;transition:opacity 0.5s;pointer-events:none">
@@ -795,10 +1041,8 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
     <!-- Info bar -->
     <div class="timer-info-bar">
         <span class="timer-event-name" id="eventName"><?= htmlspecialchars($session['event_title'] ?? 'Tournament Timer') ?></span>
-        <?php if ($pool && ($pool['bought_in'] ?? 0) > 0): ?>
         <span class="timer-stat" id="playerWrap">Players: <b id="playerCount"><?= (int)($pool['still_playing'] ?? 0) ?>/<?= (int)($pool['bought_in'] ?? 0) ?></b></span>
         <span class="timer-stat" id="poolWrap">Pool: <b id="poolTotal">$<?= number_format(($pool['pool_total'] ?? 0) / 100, 2) ?></b></span>
-        <?php endif; ?>
     </div>
 
     <!-- Main display -->
@@ -840,6 +1084,7 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
             <span class="timer-tray-sep"></span>
             <button onclick="openLevels()" title="Blind structure">&#128203;<span class="tray-label">Levels</span></button>
             <?php if (!$is_guest): ?>
+            <button onclick="enterLayoutEdit()" title="Customize theme &amp; layout">&#127912;<span class="tray-label">Theme</span></button>
             <button onclick="openSoundSettings()" title="Sound settings">&#9881;<span class="tray-label">Sounds</span></button>
             <?php endif; ?>
             <?php endif; ?>
@@ -874,6 +1119,11 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
 <?php if (!$is_remote && !$is_guest): ?>
 <!-- QR code for remote viewer -->
 <div class="timer-qr" id="qrWrap" title="Scan to view timer on your phone"></div>
+<?php endif; ?>
+
+<?php if (!$is_remote): ?>
+<!-- Themable user image (positioned + resized in edit mode) -->
+<img class="timer-image" id="themeImage" alt="" style="display:none">
 <?php endif; ?>
 
 <?php if (!$is_remote): ?>
@@ -936,6 +1186,74 @@ if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
         </div>
     </div>
 </div>
+
+<?php if (!$is_guest): ?>
+<!-- Theme library modal — pick / load / save-as / delete / set-default a saved theme. -->
+<div class="timer-levels-overlay" id="themeOverlay" onclick="if(event.target===this)closeThemes()">
+    <div class="timer-levels-panel" style="max-width:520px;position:relative">
+        <button onclick="closeThemes()" type="button"
+                style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <h3>Theme Library</h3>
+        <p style="font-size:.8rem;color:#94a3b8;margin:0 0 .75rem">Pick a saved theme, save your current edits as a new one, or set the default.</p>
+
+        <div class="timer-preset-bar">
+            <select id="themeSelect" onchange="updateThemeButtons()"><option value="">Loading...</option></select>
+            <button onclick="loadTheme()">Load</button>
+            <button onclick="saveThemeAs()">Save As...</button>
+            <button id="btnDeleteTheme" onclick="deleteTheme()">Delete</button>
+            <button id="btnSetDefaultTheme" onclick="setAsDefaultTheme()" style="display:none">Set Default</button>
+        </div>
+
+        <div class="timer-level-btns" style="margin-top:1rem">
+            <button class="btn-close-panel" onclick="closeThemes()">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- Save Theme As modal -->
+<div class="timer-levels-overlay" id="saveThemeOverlay" onclick="if(event.target===this)closeSaveThemeModal()">
+    <div class="timer-levels-panel" style="max-width:440px;position:relative">
+        <button onclick="closeSaveThemeModal()" type="button"
+                style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <h3>Save Theme As</h3>
+        <div style="display:flex;flex-direction:column;gap:1rem;margin-bottom:1rem">
+            <label style="font-size:.85rem;color:#cbd5e1">
+                Theme name
+                <input type="text" id="saveThemeName" autocomplete="off"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();confirmSaveThemeAs();}">
+            </label>
+            <label style="font-size:.85rem;color:#cbd5e1">
+                Save to
+                <select id="saveThemeScope"
+                        style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></select>
+            </label>
+        </div>
+        <div class="timer-level-btns">
+            <button class="btn-save" type="button" onclick="confirmSaveThemeAs()">Save</button>
+            <button class="btn-close-panel" type="button" onclick="closeSaveThemeModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Confirm Save modal — overwrite current theme or branch to Save As New -->
+<div class="timer-levels-overlay" id="confirmSaveOverlay" onclick="if(event.target===this)closeConfirmSave()">
+    <div class="timer-levels-panel" style="max-width:420px;position:relative">
+        <button onclick="closeConfirmSave()" type="button"
+                style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <h3>Save Theme</h3>
+        <p style="color:#cbd5e1;font-size:.9rem;margin:0 0 .5rem">Saving to: <b id="confirmSaveName" style="color:#fff">My Theme</b></p>
+        <p id="confirmSaveWarn" style="display:none;color:#fbbf24;font-size:.8rem;margin:0 0 1rem">
+            This theme is protected &mdash; saving will create a personal copy.
+        </p>
+        <div class="timer-level-btns">
+            <button class="btn-save" type="button" onclick="confirmSaveOverwrite()">&#128190; Save</button>
+            <button type="button" onclick="confirmSaveAsNew()">&#128221; Save As New&hellip;</button>
+            <button class="btn-close-panel" type="button" onclick="closeConfirmSave()">Cancel</button>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php if (!$is_remote): ?>
@@ -1142,15 +1460,16 @@ function renderAll() {
     renderPlayBtn();
 
     // Stats
+    // While in layout-edit mode, force-show all themable widgets even if their normal
+    // display rules say "no data, hide me" — the user is positioning, not playing.
+    var _inEdit = document.body.classList.contains('layout-edit');
+
     if (POOL) {
         var pc = el('playerCount'), pt = el('poolTotal');
         if (pc) pc.textContent = (POOL.still_playing || 0) + '/' + (POOL.bought_in || 0);
         if (pt) pt.textContent = fmtMoney(POOL.pool_total || 0);
-        // Show/hide player and pool if players joined mid-game
-        var pw = el('playerWrap'), plw = el('poolWrap');
-        if (pw) pw.style.display = (POOL.bought_in > 0) ? '' : 'none';
-        if (plw) plw.style.display = (POOL.bought_in > 0) ? '' : 'none';
     }
+    // Pool + Players are always visible — theme.visible controls them if the user wants to hide.
 
     // Average stack (tournament only)
     var avgWrap = el('avgStackWrap');
@@ -1168,7 +1487,8 @@ function renderAll() {
             avgVal.textContent = avg.toLocaleString();
             avgWrap.style.display = '';
         } else {
-            avgWrap.style.display = 'none';
+            avgWrap.style.display = _inEdit ? '' : 'none';
+            if (_inEdit && !avgVal.textContent) avgVal.textContent = '-';
         }
     }
 
@@ -1187,22 +1507,30 @@ function renderAll() {
             payBody.innerHTML = h;
             payWrap.style.display = '';
         } else {
-            payWrap.style.display = 'none';
+            payWrap.style.display = _inEdit ? '' : 'none';
+            if (_inEdit && !payBody.innerHTML.trim()) {
+                payBody.innerHTML = '<div class="payout-row">1st: <b>$0.00</b> (50%)</div>'
+                                  + '<div class="payout-row">2nd: <b>$0.00</b> (30%)</div>'
+                                  + '<div class="payout-row">3rd: <b>$0.00</b> (20%)</div>';
+            }
         }
     }
 
-    // Paused label
-    el('pausedLabel').textContent = TIMER.is_running ? '' : 'PAUSED';
+    // Paused label — show "PAUSED" placeholder while in edit mode so it can be themed.
+    el('pausedLabel').textContent = (_inEdit || !TIMER.is_running) ? 'PAUSED' : '';
 }
 
 function renderClock() {
     var el = document.getElementById('timerClock');
     var secs = Math.max(0, TIMER.time_remaining_seconds);
     el.textContent = fmtTime(secs);
-    el.className = 'timer-clock';
-    if (secs <= 30) el.classList.add('timer-red');
-    else if (secs <= 120) el.classList.add('timer-yellow');
-    else el.classList.add('timer-green');
+    el.classList.remove('timer-red', 'timer-yellow', 'timer-green');
+    var cTheme = (window.TIMER_THEME && window.TIMER_THEME.elements && window.TIMER_THEME.elements.clock) || {};
+    var critical = Math.max(1, parseInt(cTheme.critical_seconds, 10) || 30);
+    var warning  = Math.max(critical + 1, parseInt(cTheme.warning_seconds, 10) || 120);
+    if (secs <= critical)      el.classList.add('timer-red');
+    else if (secs <= warning)  el.classList.add('timer-yellow');
+    else                       el.classList.add('timer-green');
 }
 
 function renderPlayBtn() {
@@ -1281,6 +1609,16 @@ function pollState() {
             if (ctrl) ctrl.style.display = CAN_CONTROL ? '' : 'none';
         }
         POOL = j.pool;
+        // Theme: if it changed under us (another tab edited it), re-apply.
+        // Skip while the theme editor is open so we don't clobber live preview.
+        if (j.theme && typeof applyTheme === 'function') {
+            var themeOpen = document.getElementById('themeOverlay') && document.getElementById('themeOverlay').classList.contains('open');
+            if (!themeOpen && j.theme.id !== window.TIMER_THEME_ID) {
+                window.TIMER_THEME = j.theme.properties;
+                window.TIMER_THEME_ID = j.theme.id;
+                applyTheme(j.theme.properties);
+            }
+        }
         renderAll();
     }).catch(function() {});
 }
@@ -2100,7 +2438,1012 @@ function deletePreset() {
         });
 }
 
+// ─── Theme editor ─────────────────────────────────────────
+var THEMES_CACHE = [];
+var CURRENT_THEME_ID = window.TIMER_THEME_ID || null;
+
+var THEME_ELEMENTS = [
+    { key:'event_name',   label:'Event name',    reorderable:false, hasClock:false },
+    { key:'player_count', label:'Player count',  reorderable:false, hasClock:false },
+    { key:'pool_total',   label:'Prize pool',    reorderable:false, hasClock:false },
+    { key:'level_label',  label:'Level label',   reorderable:true,  hasClock:false },
+    { key:'blinds',       label:'Blinds',        reorderable:true,  hasClock:false },
+    { key:'clock',        label:'Clock',         reorderable:true,  hasClock:true  },
+    { key:'paused_label', label:'Paused label',  reorderable:false, hasClock:false },
+    { key:'next_level',   label:'Next level',    reorderable:true,  hasClock:false },
+    { key:'avg_stack',    label:'Avg stack',     reorderable:false, hasClock:false },
+    { key:'payouts',      label:'Payouts',       reorderable:false, hasClock:false },
+    { key:'qr',           label:'QR code',       reorderable:false, hasClock:false, noColor:true },
+    { key:'image',        label:'Image',         reorderable:false, hasClock:false, noColor:true, hasUpload:true },
+];
+
+// Element key → CSS selector (used to apply visibility + order).
+var THEME_SELECTORS = {
+    event_name:   '.timer-event-name',
+    player_count: '#playerWrap',
+    pool_total:   '#poolWrap',
+    level_label:  '.timer-level-label',
+    blinds:       '.timer-blinds',
+    clock:        '.timer-clock',
+    paused_label: '#pausedLabel',
+    next_level:   '.timer-next',
+    avg_stack:    '#avgStackWrap',
+    payouts:      '#payoutsWrap',
+    qr:           '#qrWrap',
+    image:        '#themeImage',
+};
+
+// Map element key → list of CSS custom properties it controls.
+function applyTheme(props) {
+    if (!props) return;
+    // The server-rendered #themeStyle inlines CSS with `display: none !important` for any
+    // hidden elements at page-load time. Once JS is authoritative, clear it so our inline
+    // styles (used for in-edit ghosting) aren't blocked by that !important rule.
+    var themeStyle = document.getElementById('themeStyle');
+    if (themeStyle && themeStyle.dataset.cleared !== '1') {
+        themeStyle.textContent = '';
+        themeStyle.dataset.cleared = '1';
+    }
+    var root = document.documentElement.style;
+    var el = props.elements || {};
+    var tray = props.tray || {};
+    var bg = props.background || {};
+
+    // Background
+    var bgVal = '#0f172a';
+    if (bg.type === 'gradient' && bg.gradient) {
+        bgVal = 'linear-gradient(' + (bg.gradient.angle||180) + 'deg, ' + (bg.gradient.from||'#0f172a') + ', ' + (bg.gradient.to||'#1e293b') + ')';
+    } else if (bg.type === 'image' && bg.image_url) {
+        bgVal = "url('" + bg.image_url.replace(/'/g, '') + "') center/cover no-repeat";
+    } else {
+        bgVal = bg.color || '#0f172a';
+    }
+    root.setProperty('--timer-bg', bgVal);
+
+    if (el.event_name)   { root.setProperty('--timer-event-color', el.event_name.color || '#fff');     root.setProperty('--timer-event-scale', String(el.event_name.scale || 1)); }
+    if (el.player_count) root.setProperty('--timer-stat-color', el.player_count.color || '#94a3b8');
+    if (el.level_label)  { root.setProperty('--timer-level-color', el.level_label.color || '#94a3b8'); root.setProperty('--timer-level-scale', String(el.level_label.scale || 1)); }
+    if (el.blinds)       { root.setProperty('--timer-blinds-color', el.blinds.color || '#fff');        root.setProperty('--timer-blinds-scale', String(el.blinds.scale || 1)); }
+    if (el.clock) {
+        root.setProperty('--timer-clock-green', el.clock.color_green || '#22c55e');
+        root.setProperty('--timer-clock-yellow', el.clock.color_yellow || '#fbbf24');
+        root.setProperty('--timer-clock-red', el.clock.color_red || '#ef4444');
+        root.setProperty('--timer-clock-scale', String(el.clock.scale || 1));
+    }
+    if (el.next_level)   { root.setProperty('--timer-next-color', el.next_level.color || '#94a3b8');   root.setProperty('--timer-next-scale', String(el.next_level.scale || 1)); }
+    if (el.paused_label) { root.setProperty('--timer-paused-color', el.paused_label.color || '#fbbf24'); root.setProperty('--timer-paused-scale', String(el.paused_label.scale || 1)); }
+    if (el.avg_stack)    root.setProperty('--timer-avgstack-color', el.avg_stack.color || '#94a3b8');
+    if (el.payouts)      root.setProperty('--timer-payouts-color', el.payouts.color || '#94a3b8');
+    if (el.qr) {
+        var qrNode = document.getElementById('qrWrap');
+        if (qrNode) qrNode.style.setProperty('--timer-qr-scale', String(el.qr.scale || 1));
+    }
+    // One-time migration: legacy `background.image_url` becomes the new image element.
+    if (bg && bg.image_url && bg.type === 'image' && !(el.image && el.image.url)) {
+        el.image = el.image || {};
+        el.image.url = bg.image_url;
+        el.image.visible = true;
+        el.image.scale = el.image.scale || 1;
+        bg.image_url = '';
+        bg.type = 'color';
+        props.elements = el;
+    }
+    // Apply the image element (src + scale).
+    var imgNode = document.getElementById('themeImage');
+    if (imgNode) {
+        if (el.image && el.image.url && el.image.visible !== false) {
+            if (imgNode.getAttribute('src') !== el.image.url) imgNode.setAttribute('src', el.image.url);
+            imgNode.style.display = '';
+            imgNode.style.setProperty('--timer-image-scale', String(el.image.scale || 1));
+        } else if (el.image && el.image.url && el.image.visible === false) {
+            // Theme-hidden: keep src but let the standard visibility loop ghost/hide it.
+            if (imgNode.getAttribute('src') !== el.image.url) imgNode.setAttribute('src', el.image.url);
+            imgNode.style.display = '';
+            imgNode.style.setProperty('--timer-image-scale', String(el.image.scale || 1));
+        } else {
+            imgNode.removeAttribute('src');
+            imgNode.style.display = 'none';
+        }
+    }
+
+    root.setProperty('--timer-tray-button-bg', tray.bg_color || '#1e293b');
+    root.setProperty('--timer-tray-button-color', tray.button_color || '#e2e8f0');
+    root.setProperty('--timer-accent', tray.accent_color || '#2563eb');
+
+    // Visibility — in edit mode, "hidden" elements ghost at low opacity so the user
+    // can still see them, drag them, and click the eye icon to un-hide. Outside edit
+    // mode they go full `display: none`.
+    var inEdit = document.body.classList.contains('layout-edit');
+    for (var k in THEME_SELECTORS) {
+        var node = document.querySelector(THEME_SELECTORS[k]);
+        if (!node) continue;
+        var visible = el[k] && el[k].visible !== false;
+        if (!visible) {
+            node.dataset._themeHidden = '1';
+            if (inEdit) {
+                node.style.display = '';
+                node.style.opacity = '0.35';
+            } else {
+                node.style.display = 'none';
+                node.style.opacity = '';
+            }
+        } else if (node.dataset._themeHidden === '1') {
+            delete node.dataset._themeHidden;
+            node.style.display = '';
+            node.style.opacity = '';
+        }
+    }
+
+    // Order
+    ['level_label','blinds','clock','next_level'].forEach(function(k){
+        var node = document.querySelector(THEME_SELECTORS[k]);
+        if (!node) return;
+        var ord = (el[k] && el[k].order) ? parseInt(el[k].order,10) : 0;
+        if (ord > 0) node.style.order = String(ord);
+    });
+
+    // Free-form positions: any element with elements[key].pos = {x,y} gets pulled out of
+    // flow and pinned to (x%, y%) of the viewport, anchored at the element's center.
+    for (var k2 in THEME_SELECTORS) {
+        var node2 = document.querySelector(THEME_SELECTORS[k2]);
+        if (!node2) continue;
+        var pe = el[k2];
+        var pos = (pe && pe.pos && typeof pe.pos.x === 'number' && typeof pe.pos.y === 'number') ? pe.pos : null;
+        if (pos) {
+            node2.classList.add('timer-positioned');
+            node2.style.setProperty('--pos-x', pos.x + '%');
+            node2.style.setProperty('--pos-y', pos.y + '%');
+        } else {
+            node2.classList.remove('timer-positioned');
+            node2.style.removeProperty('--pos-x');
+            node2.style.removeProperty('--pos-y');
+        }
+    }
+}
+
+// Build a deep-cloned theme payload from the current in-memory state. With the modal
+// slimmed down to a pure library, all element/bg/tray edits flow through the in-place
+// inspector (which mutates window.TIMER_THEME directly), so we can just return a copy.
+function readThemeFromUI() {
+    return JSON.parse(JSON.stringify(window.TIMER_THEME || {}));
+}
+
+function openThemes() {
+    document.getElementById('themeOverlay').classList.add('open');
+    fetchThemes();
+}
+
+function closeThemes() {
+    document.getElementById('themeOverlay').classList.remove('open');
+}
+
+function fetchThemes() {
+    fetch('/timer_dl.php?action=get_themes')
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            if (!j.ok) return;
+            THEMES_CACHE = j.themes || [];
+            renderThemeSelect();
+        });
+}
+
+function renderThemeSelect() {
+    var sel = document.getElementById('themeSelect');
+    if (!sel) return;
+    var groups = { def:[], global:[], league:{}, mine:[] };
+    THEMES_CACHE.forEach(function(t){
+        if (t.is_default) groups.def.push(t);
+        else if (t.is_global) groups.global.push(t);
+        else if (t.league_id) {
+            var k = t.league_name || ('League '+t.league_id);
+            (groups.league[k] = groups.league[k] || []).push(t);
+        } else groups.mine.push(t);
+    });
+    var html = '';
+    function opt(t) { return '<option value="'+t.id+'"'+(t.id == CURRENT_THEME_ID ? ' selected' : '')+'>'+t.name+'</option>'; }
+    if (groups.def.length)    html += '<optgroup label="Default">' + groups.def.map(opt).join('') + '</optgroup>';
+    if (groups.global.length) html += '<optgroup label="Global">' + groups.global.map(opt).join('') + '</optgroup>';
+    Object.keys(groups.league).forEach(function(k){
+        html += '<optgroup label="League — '+k+'">' + groups.league[k].map(opt).join('') + '</optgroup>';
+    });
+    if (groups.mine.length)   html += '<optgroup label="My Themes">' + groups.mine.map(opt).join('') + '</optgroup>';
+    sel.innerHTML = html;
+    updateThemeButtons();
+}
+
+function updateThemeButtons() {
+    var sel = document.getElementById('themeSelect');
+    var tid = parseInt(sel.value || '0', 10);
+    var t = THEMES_CACHE.find(function(x){ return x.id == tid; });
+    var del = document.getElementById('btnDeleteTheme');
+    var setDef = document.getElementById('btnSetDefaultTheme');
+    if (!t) { del.disabled = true; setDef.style.display = 'none'; return; }
+    var isMine = (t.created_by == <?= json_encode((int)($current['id'] ?? 0)) ?>);
+    del.disabled = !!t.is_default || (!IS_ADMIN && !isMine);
+    setDef.style.display = IS_ADMIN ? '' : 'none';
+}
+
+function loadTheme() {
+    var tid = parseInt(document.getElementById('themeSelect').value || '0', 10);
+    if (!tid) return;
+    var fd = new FormData();
+    fd.append('action','load_theme');
+    fd.append('csrf_token', CSRF);
+    appendTimerId(fd);
+    fd.append('theme_id', tid);
+    fetch('/timer_dl.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if (!j.ok) { alert(j.error||'Load failed'); return; }
+        CURRENT_THEME_ID = tid;
+        window.TIMER_THEME_ID = tid;
+        window.TIMER_THEME = j.properties;
+        applyTheme(j.properties);
+        populateThemeEditor(j.properties);
+    });
+}
+
+function saveThemeAs() {
+    var leagueScopes = [];
+    fetch('/timer_dl.php?action=get_user_leagues').then(function(r){return r.json();}).then(function(j){
+        if (j.ok && j.leagues) leagueScopes = j.leagues;
+        var sel = document.getElementById('saveThemeScope');
+        var html = '<option value="personal">Personal (only me)</option>';
+        leagueScopes.forEach(function(l){ html += '<option value="league:'+l.id+'">League: '+l.name+'</option>'; });
+        if (IS_ADMIN) html += '<option value="global">Global (all users)</option>';
+        sel.innerHTML = html;
+        document.getElementById('saveThemeName').value = '';
+        document.getElementById('saveThemeOverlay').classList.add('open');
+        setTimeout(function(){ document.getElementById('saveThemeName').focus(); }, 50);
+    });
+}
+
+function closeSaveThemeModal() {
+    document.getElementById('saveThemeOverlay').classList.remove('open');
+}
+
+function confirmSaveThemeAs() {
+    var name = document.getElementById('saveThemeName').value.trim();
+    if (!name) { alert('Name required'); return; }
+    var scope = document.getElementById('saveThemeScope').value;
+    var is_global = scope === 'global' ? 1 : 0;
+    var league_id = scope.indexOf('league:') === 0 ? parseInt(scope.slice(7),10) : 0;
+    var props = readThemeFromUI();
+    var fd = new FormData();
+    fd.append('action','save_theme');
+    fd.append('csrf_token', CSRF);
+    appendTimerId(fd);
+    fd.append('name', name);
+    fd.append('is_global', is_global);
+    if (league_id) fd.append('league_id', league_id);
+    fd.append('properties', JSON.stringify(props));
+    fetch('/timer_dl.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if (!j.ok) { alert(j.error||'Save failed'); return; }
+        CURRENT_THEME_ID = j.theme_id;
+        window.TIMER_THEME_ID = j.theme_id;
+        closeSaveThemeModal();
+        fetchThemes();
+    });
+}
+
+function saveThemeChanges() {
+    var props = readThemeFromUI();
+    if (!CURRENT_THEME_ID) {
+        // No theme loaded — prompt for Save As instead.
+        saveThemeAs();
+        return;
+    }
+    var fd = new FormData();
+    fd.append('action','update_theme');
+    fd.append('csrf_token', CSRF);
+    appendTimerId(fd);
+    fd.append('properties', JSON.stringify(props));
+    fetch('/timer_dl.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if (!j.ok) { alert(j.error||'Save failed'); return; }
+        CURRENT_THEME_ID = j.theme_id;
+        window.TIMER_THEME_ID = j.theme_id;
+        if (j.created_copy) {
+            alert('That theme is protected. A personal copy was created — rename it via Save As if you like.');
+        }
+        fetchThemes();
+    });
+}
+
+function deleteTheme() {
+    var tid = parseInt(document.getElementById('themeSelect').value || '0', 10);
+    if (!tid) return;
+    if (!confirm('Delete this theme?')) return;
+    var fd = new FormData();
+    fd.append('action','delete_theme');
+    fd.append('csrf_token', CSRF);
+    fd.append('theme_id', tid);
+    fetch('/timer_dl.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if (!j.ok) { alert(j.error||'Delete failed'); return; }
+        if (tid === CURRENT_THEME_ID) {
+            CURRENT_THEME_ID = null;
+            window.TIMER_THEME_ID = null;
+        }
+        fetchThemes();
+    });
+}
+
+function setAsDefaultTheme() {
+    var tid = parseInt(document.getElementById('themeSelect').value || '0', 10);
+    if (!tid) return;
+    var fd = new FormData();
+    fd.append('action','set_default_theme');
+    fd.append('csrf_token', CSRF);
+    fd.append('theme_id', tid);
+    fetch('/timer_dl.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
+        if (!j.ok) { alert(j.error||'Failed'); return; }
+        fetchThemes();
+    });
+}
+
+// ─── Free-form layout edit mode (drag elements on the live timer) ─────
+var LAYOUT_EDIT_ON = false;
+var LAYOUT_EDIT_SNAPSHOT = null;  // theme JSON snapshot for Cancel
+var LAYOUT_DRAG_HANDLERS = [];    // [{ node, handler }] for cleanup
+
+// Fallback positions (% of viewport, element center) — used when capture fails (e.g.,
+// element has 0x0 rect because content hasn't rendered yet or it's a JS-conditional widget).
+// Without these, the un-positioned element stays in flex flow and gets overlapped by
+// other elements that DID get positioned out of flow.
+var LAYOUT_DEFAULT_POS = {
+    event_name:   { x: 50, y: 4 },
+    player_count: { x: 35, y: 8 },
+    pool_total:   { x: 65, y: 8 },
+    level_label:  { x: 50, y: 22 },
+    blinds:       { x: 50, y: 38 },
+    clock:        { x: 50, y: 60 },
+    paused_label: { x: 50, y: 78 },
+    next_level:   { x: 50, y: 88 },
+    avg_stack:    { x: 8,  y: 14 },
+    payouts:      { x: 92, y: 14 },
+    qr:           { x: 94, y: 92 },
+    image:        { x: 50, y: 50 },
+};
+
+function enterLayoutEdit() {
+    if (LAYOUT_EDIT_ON) return;
+    LAYOUT_EDIT_ON = true;
+    LAYOUT_EDIT_SNAPSHOT = JSON.parse(JSON.stringify(window.TIMER_THEME || {}));
+    closeThemes();
+    document.body.classList.add('layout-edit');
+
+    // Ensure on-screen content is up to date before measuring.
+    renderAll();
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+
+    Object.keys(THEME_SELECTORS).forEach(function(key) {
+        var node = document.querySelector(THEME_SELECTORS[key]);
+        if (!node) return;
+        var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+        // Even hidden elements should be positioned + outlined in edit mode so the user
+        // can find them, drag them, and click the eye icon to un-hide.
+        // Validate any existing pos — drop stale/out-of-bounds values from a previous session.
+        if (pe.pos && (
+            typeof pe.pos.x !== 'number' || typeof pe.pos.y !== 'number' ||
+            pe.pos.x < 0 || pe.pos.x > 100 || pe.pos.y < 0 || pe.pos.y > 100
+        )) {
+            delete pe.pos;
+        }
+        if (pe.pos) return;
+        var rect = node.getBoundingClientRect();
+        if (rect.width > 1 && rect.height > 1) {
+            pe.pos = {
+                x: ((rect.left + rect.width / 2) / window.innerWidth)  * 100,
+                y: ((rect.top  + rect.height / 2) / window.innerHeight) * 100,
+            };
+        } else if (LAYOUT_DEFAULT_POS[key]) {
+            // Fall back to a sensible default so the element doesn't get stuck in flex
+            // flow under the other (now-positioned) siblings.
+            pe.pos = { x: LAYOUT_DEFAULT_POS[key].x, y: LAYOUT_DEFAULT_POS[key].y };
+        }
+    });
+
+    applyTheme(window.TIMER_THEME);
+    attachAllDragHandlers();
+}
+
+function exitLayoutEdit(keep) {
+    if (!LAYOUT_EDIT_ON) return;
+    LAYOUT_EDIT_ON = false;
+    document.body.classList.remove('layout-edit');
+    detachAllDragHandlers();
+    deselectElement();
+    removeAllEyeIcons();
+    if (!keep && LAYOUT_EDIT_SNAPSHOT) {
+        window.TIMER_THEME = LAYOUT_EDIT_SNAPSHOT;
+    }
+    LAYOUT_EDIT_SNAPSHOT = null;
+    applyTheme(window.TIMER_THEME);
+    // If user clicked Save: confirm before overwriting the current theme. Brand-new
+    // themes (no CURRENT_THEME_ID) jump straight to Save As since there's nothing to overwrite.
+    if (keep) {
+        if (CURRENT_THEME_ID) {
+            openConfirmSave();
+        } else {
+            saveThemeAs();
+        }
+    }
+}
+
+// ─── Confirm-Save dialog (overwrite vs Save As New) ───────
+function openConfirmSave() {
+    var t = (THEMES_CACHE || []).find(function(x){ return x.id == CURRENT_THEME_ID; });
+    var nameEl = document.getElementById('confirmSaveName');
+    var warnEl = document.getElementById('confirmSaveWarn');
+    if (nameEl) nameEl.textContent = t ? t.name : 'My Theme';
+    // Warn if the target is protected and the user can't edit it directly.
+    var protectedTheme = false;
+    if (t) {
+        var isMine = (t.created_by == <?= json_encode((int)($current['id'] ?? 0)) ?>);
+        if ((t.is_default || t.is_global) && !IS_ADMIN) protectedTheme = true;
+        else if (t.league_id && !IS_ADMIN && !isMine) protectedTheme = true;
+    }
+    if (warnEl) warnEl.style.display = protectedTheme ? '' : 'none';
+    document.getElementById('confirmSaveOverlay').classList.add('open');
+}
+
+function closeConfirmSave() {
+    document.getElementById('confirmSaveOverlay').classList.remove('open');
+}
+
+function confirmSaveOverwrite() {
+    closeConfirmSave();
+    saveThemeChanges();
+}
+
+function confirmSaveAsNew() {
+    closeConfirmSave();
+    saveThemeAs();
+}
+
+function resetPositions() {
+    if (!window.TIMER_THEME || !window.TIMER_THEME.elements) return;
+    Object.keys(window.TIMER_THEME.elements).forEach(function(k){
+        delete window.TIMER_THEME.elements[k].pos;
+    });
+    applyTheme(window.TIMER_THEME);
+    // After resetting, re-promote elements to dragging using their natural positions.
+    detachAllDragHandlers();
+    // Recompute pos values from current rendered positions, then re-attach.
+    Object.keys(THEME_SELECTORS).forEach(function(key) {
+        var node = document.querySelector(THEME_SELECTORS[key]);
+        if (!node) return;
+        var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+        if (pe.visible === false) return;
+        var rect = node.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+        pe.pos = {
+            x: ((rect.left + rect.width/2) / window.innerWidth) * 100,
+            y: ((rect.top + rect.height/2) / window.innerHeight) * 100,
+        };
+    });
+    applyTheme(window.TIMER_THEME);
+    attachAllDragHandlers();
+}
+
+function attachAllDragHandlers() {
+    Object.keys(THEME_SELECTORS).forEach(function(key) {
+        var node = document.querySelector(THEME_SELECTORS[key]);
+        if (!node) return;
+        if (!node.classList.contains('timer-positioned')) return;
+        // Eye icon for quick visibility toggle.
+        attachEyeIcon(node, key);
+        // Combined drag-OR-select handler. Movement above threshold = drag (reposition).
+        // Movement at/below threshold + release = click (open inspector for this element).
+        var handler = makeDragStart(node, key);
+        var wheel   = makeWheelScale(key);
+        node.addEventListener('mousedown', handler);
+        node.addEventListener('touchstart', handler, { passive: false });
+        node.addEventListener('wheel', wheel, { passive: false });
+        LAYOUT_DRAG_HANDLERS.push({ node: node, handler: handler, wheel: wheel });
+    });
+}
+
+function detachAllDragHandlers() {
+    LAYOUT_DRAG_HANDLERS.forEach(function(h){
+        h.node.removeEventListener('mousedown', h.handler);
+        h.node.removeEventListener('touchstart', h.handler);
+        if (h.wheel) h.node.removeEventListener('wheel', h.wheel);
+    });
+    LAYOUT_DRAG_HANDLERS = [];
+}
+
+// Mouse wheel over an element in edit mode adjusts its scale.
+// Hold Shift for a finer step.
+function makeWheelScale(key) {
+    return function(ev) {
+        ev.preventDefault();
+        var step  = ev.shiftKey ? 0.02 : 0.05;
+        var delta = ev.deltaY < 0 ? step : -step;
+        window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+        var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+        var v = Math.max(0.3, Math.min(3.0, (pe.scale || 1) + delta));
+        pe.scale = Math.round(v * 100) / 100;
+        applyTheme(window.TIMER_THEME);
+        // If the inspector is showing this element, refresh its size label.
+        if (LAYOUT_SELECTED_KEY === key) {
+            var lbl = document.getElementById('ins_scale_' + key);
+            if (lbl) lbl.textContent = Math.round(pe.scale * 100) + '%';
+        }
+    };
+}
+
+function attachEyeIcon(node, key) {
+    // Don't double-add.
+    var existing = node.querySelector(':scope > .layout-eye');
+    if (existing) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'layout-eye';
+    btn.dataset.key = key;
+    var pe = (window.TIMER_THEME.elements || {})[key] || {};
+    btn.innerHTML = pe.visible === false ? '&#128064;' : '&#128065;';  // closed/open eye
+    if (pe.visible === false) btn.classList.add('is-hidden');
+    btn.title = 'Toggle visibility';
+    btn.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    btn.addEventListener('touchstart', function(e){ e.stopPropagation(); }, { passive: true });
+    btn.addEventListener('click', function(e){
+        e.stopPropagation();
+        e.preventDefault();
+        toggleElementVisibility(key);
+    });
+    node.appendChild(btn);
+}
+
+function removeAllEyeIcons() {
+    document.querySelectorAll('.layout-eye').forEach(function(b){ b.remove(); });
+}
+
+function toggleElementVisibility(key) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+    pe.visible = pe.visible === false;  // flip
+    applyTheme(window.TIMER_THEME);
+    // Refresh the eye icon glyph (open/closed) for this element.
+    var node = document.querySelector(THEME_SELECTORS[key]);
+    var eye = node && node.querySelector(':scope > .layout-eye');
+    if (eye) {
+        eye.innerHTML = pe.visible === false ? '&#128064;' : '&#128065;';
+        eye.classList.toggle('is-hidden', pe.visible === false);
+    }
+    refreshHiddenInInspector();
+}
+
+function makeDragStart(node, key) {
+    return function start(ev) {
+        if (ev.target.closest('.layout-eye')) return;  // eye icon owns its own clicks
+        ev.preventDefault();
+        ev.stopPropagation();
+        var pt = ev.touches ? ev.touches[0] : ev;
+        var startX = pt.clientX, startY = pt.clientY;
+        var rect = node.getBoundingClientRect();
+        var offX = pt.clientX - (rect.left + rect.width / 2);
+        var offY = pt.clientY - (rect.top  + rect.height / 2);
+        var moved = false;
+        var THRESH = 5;
+
+        var SNAP_PCT = 2;  // distance (in % of viewport) for a mild snap to center
+        var guideV = document.getElementById('centerGuideV');
+        var guideH = document.getElementById('centerGuideH');
+        function onMove(ev2) {
+            var p = ev2.touches ? ev2.touches[0] : ev2;
+            if (!moved && (Math.abs(p.clientX - startX) > THRESH || Math.abs(p.clientY - startY) > THRESH)) {
+                moved = true;
+            }
+            if (!moved) return;
+            ev2.preventDefault();
+            var cx = ((p.clientX - offX) / window.innerWidth)  * 100;
+            var cy = ((p.clientY - offY) / window.innerHeight) * 100;
+            // Mild snap to viewport center lines.
+            var snapX = Math.abs(cx - 50) < SNAP_PCT;
+            var snapY = Math.abs(cy - 50) < SNAP_PCT;
+            if (snapX) cx = 50;
+            if (snapY) cy = 50;
+            if (guideV) guideV.classList.toggle('is-snapping', snapX);
+            if (guideH) guideH.classList.toggle('is-snapping', snapY);
+            cx = Math.max(2, Math.min(98, cx));
+            cy = Math.max(2, Math.min(98, cy));
+            node.style.setProperty('--pos-x', cx + '%');
+            node.style.setProperty('--pos-y', cy + '%');
+            window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+            window.TIMER_THEME.elements[key].pos = { x: cx, y: cy };
+        }
+        function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onUp);
+            document.removeEventListener('touchcancel', onUp);
+            if (guideV) guideV.classList.remove('is-snapping');
+            if (guideH) guideH.classList.remove('is-snapping');
+            if (!moved) {
+                // Treat as click → select element + open inspector.
+                selectElement(key);
+            }
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+        document.addEventListener('touchcancel', onUp);
+    };
+}
+
+// ─── Inspector (per-element properties panel) ─────────────
+var LAYOUT_SELECTED_KEY = null;
+
+function selectElement(key) {
+    LAYOUT_SELECTED_KEY = key;
+    document.querySelectorAll('.timer-positioned.is-selected').forEach(function(n){ n.classList.remove('is-selected'); });
+    // The 'page' pseudo-element has no DOM node — skip the outline step.
+    var sel = THEME_SELECTORS[key];
+    if (sel) {
+        var node = document.querySelector(sel);
+        if (node) node.classList.add('is-selected');
+    }
+    renderInspector(key);
+    var panel = document.getElementById('layoutInspector');
+    if (panel) panel.classList.add('is-open');
+}
+
+function deselectElement() {
+    LAYOUT_SELECTED_KEY = null;
+    document.querySelectorAll('.timer-positioned.is-selected').forEach(function(n){ n.classList.remove('is-selected'); });
+    var panel = document.getElementById('layoutInspector');
+    if (panel) panel.classList.remove('is-open');
+}
+
+function closeInspector() { deselectElement(); }
+
+function renderInspector(key) {
+    var title = document.getElementById('inspectorTitle');
+    var body  = document.getElementById('inspectorBody');
+    if (!body) return;
+    if (key === 'page') {
+        if (title) title.textContent = 'Page';
+        body.innerHTML = renderPageInspector();
+        return;
+    }
+    var meta = THEME_ELEMENTS.find(function(e){ return e.key === key; });
+    if (!meta) return;
+    var pe = (window.TIMER_THEME.elements || {})[key] || {};
+    if (title) title.textContent = meta.label;
+
+    var rows = [];
+
+    // Visibility
+    rows.push(''
+        + '<div class="layout-inspector-row"><label>Visible</label>'
+        + '<button type="button" class="ins-btn" onclick="toggleElementVisibility(\''+key+'\');renderInspector(\''+key+'\')">'
+        + (pe.visible === false ? '&#128064; Show' : '&#128065; Hide')
+        + '</button></div>');
+
+    // Color(s) — skipped for elements that aren't text (e.g. QR code).
+    if (!meta.noColor) {
+        if (meta.hasClock) {
+            var warnSec = parseInt(pe.warning_seconds, 10) || 120;
+            var critSec = parseInt(pe.critical_seconds, 10) || 30;
+            // Normal — color only, no threshold (everything above Warning is Normal).
+            rows.push('<div class="layout-inspector-row"><label>Normal</label>'
+                + '<input type="color" value="'+(pe.color_green||'#22c55e')+'" oninput="onInspectorColor(\'clock\',\'green\',this.value)"></div>');
+            // Warning ≤ N sec
+            rows.push('<div class="layout-inspector-row"><label>Warning &le;</label>'
+                + '<span style="display:inline-flex;gap:.3rem;align-items:center">'
+                + '<input type="number" min="1" max="86400" value="'+warnSec+'" '
+                + 'style="width:4rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:.15rem .3rem;font-size:.8rem" '
+                + 'oninput="onClockThreshold(\'warning\',this.value)" title="Seconds remaining when clock switches to Warning color">'
+                + '<span style="color:#94a3b8;font-size:.75rem">sec</span>'
+                + '<input type="color" value="'+(pe.color_yellow||'#fbbf24')+'" oninput="onInspectorColor(\'clock\',\'yellow\',this.value)">'
+                + '</span></div>');
+            // Critical ≤ N sec
+            rows.push('<div class="layout-inspector-row"><label>Critical &le;</label>'
+                + '<span style="display:inline-flex;gap:.3rem;align-items:center">'
+                + '<input type="number" min="1" max="86400" value="'+critSec+'" '
+                + 'style="width:4rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:.15rem .3rem;font-size:.8rem" '
+                + 'oninput="onClockThreshold(\'critical\',this.value)" title="Seconds remaining when clock switches to Critical color (pulse)">'
+                + '<span style="color:#94a3b8;font-size:.75rem">sec</span>'
+                + '<input type="color" value="'+(pe.color_red||'#ef4444')+'" oninput="onInspectorColor(\'clock\',\'red\',this.value)">'
+                + '</span></div>');
+        } else {
+            var col = pe.color || '#94a3b8';
+            rows.push('<div class="layout-inspector-row"><label>Color</label>'
+                + '<input type="color" value="'+col+'" oninput="onInspectorColor(\''+key+'\',null,this.value)"></div>');
+        }
+    }
+
+    // Size
+    var sc = pe.scale || 1;
+    rows.push(''
+        + '<div class="layout-inspector-row"><label>Size</label>'
+        + '<span style="display:inline-flex;align-items:center;gap:.3rem">'
+        + '<button type="button" class="ins-btn" onclick="onInspectorScale(\''+key+'\',-0.1)">&minus;</button>'
+        + '<span class="ins-scale" id="ins_scale_'+key+'">'+Math.round(sc*100)+'%</span>'
+        + '<button type="button" class="ins-btn" onclick="onInspectorScale(\''+key+'\',0.1)">+</button>'
+        + '</span></div>');
+
+    // Reset position
+    rows.push(''
+        + '<div class="layout-inspector-row"><label>Position</label>'
+        + '<button type="button" class="ins-btn" onclick="resetElementPosition(\''+key+'\')">&#8635; Reset</button></div>');
+
+    // Upload / Remove for elements that carry an image URL (image element).
+    if (meta.hasUpload) {
+        rows.push(''
+            + '<div class="layout-inspector-row"><label>Image</label>'
+            + '<button type="button" class="ins-btn" onclick="document.getElementById(\'imageElUpload\').click()">'
+            + (pe.url ? 'Replace&hellip;' : 'Upload&hellip;')
+            + '</button></div>');
+        rows.push('<input type="file" id="imageElUpload" accept="image/*" style="display:none" onchange="onImageElementUpload(this)">');
+        if (pe.url) {
+            rows.push(''
+                + '<div class="layout-inspector-row"><label>&nbsp;</label>'
+                + '<button type="button" class="ins-btn" style="background:#7f1d1d;border-color:#991b1b;color:#fff" onclick="onImageElementRemove()">Remove image</button></div>');
+        }
+    }
+
+    body.innerHTML = rows.join('');
+}
+
+// Upload handler used by the Image element's inspector and the Page inspector "Add image" button.
+function onImageElementUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    var fd = new FormData();
+    fd.append('action', 'upload_theme_bg');
+    fd.append('csrf_token', CSRF);
+    fd.append('image', input.files[0]);
+    fetch('/timer_dl.php', { method:'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            if (!j.ok) { alert(j.error || 'Upload failed'); return; }
+            window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+            var pe = window.TIMER_THEME.elements.image = window.TIMER_THEME.elements.image || {};
+            pe.url = j.url;
+            pe.visible = true;
+            if (!pe.scale) pe.scale = 1;
+            if (!pe.pos)   pe.pos = { x: LAYOUT_DEFAULT_POS.image.x, y: LAYOUT_DEFAULT_POS.image.y };
+            applyTheme(window.TIMER_THEME);
+            // Re-attach drag handlers so the (potentially new) #themeImage node is interactive.
+            detachAllDragHandlers();
+            attachAllDragHandlers();
+            selectElement('image');
+        });
+}
+
+function onImageElementRemove() {
+    if (!window.TIMER_THEME.elements || !window.TIMER_THEME.elements.image) return;
+    window.TIMER_THEME.elements.image.url = '';
+    window.TIMER_THEME.elements.image.visible = false;
+    applyTheme(window.TIMER_THEME);
+    detachAllDragHandlers();
+    attachAllDragHandlers();
+    // After removal, drop selection.
+    deselectElement();
+}
+
+// Render the "Page" inspector: background type + colors + tray colors.
+function renderPageInspector() {
+    var bg = (window.TIMER_THEME.background) || {};
+    var tray = (window.TIMER_THEME.tray) || {};
+    var bgType = bg.type || 'color';
+    var solidColor = bg.color || '#0f172a';
+    var gFrom = (bg.gradient && bg.gradient.from) || '#0f172a';
+    var gTo   = (bg.gradient && bg.gradient.to)   || '#1e293b';
+    var gAng  = (bg.gradient && bg.gradient.angle) || 180;
+    var imgUrl = bg.image_url || '';
+    var trayBg     = tray.bg_color     || '#1e293b';
+    var trayBtn    = tray.button_color || '#e2e8f0';
+    var trayAccent = tray.accent_color || '#2563eb';
+
+    function bgRow(val, label, hidden) {
+        var sel = (bgType === val) ? 'checked' : '';
+        var disp = hidden ? 'display:none' : '';
+        return '<div class="layout-inspector-row" id="page_bg_row_'+val+'" style="'+disp+'">'
+            + '<label><input type="radio" name="pageBgType" value="'+val+'" '+sel+' onchange="onPageBgType(this.value)"> '+label+'</label></div>';
+    }
+
+    var rows = [];
+    rows.push('<div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem">Background</div>');
+    rows.push('<div class="layout-inspector-row"><label>Type</label>'
+        + '<select onchange="onPageBgType(this.value)" class="ins-btn" style="padding:0.2rem 0.4rem">'
+        + '<option value="color"'    + (bgType==='color'?' selected':'')    + '>Solid</option>'
+        + '<option value="gradient"' + (bgType==='gradient'?' selected':'') + '>Gradient</option>'
+        + '</select></div>');
+
+    // Solid color row
+    rows.push('<div class="layout-inspector-row" id="page_solid_row" style="'+(bgType==='color'?'':'display:none')+'">'
+        + '<label>Color</label>'
+        + '<input type="color" value="'+solidColor+'" oninput="onPageBgChange(\'color\', this.value)"></div>');
+    // Gradient rows
+    rows.push('<div id="page_grad_block" style="'+(bgType==='gradient'?'':'display:none')+'">'
+        + '<div class="layout-inspector-row"><label>From</label>'
+        + '<input type="color" value="'+gFrom+'" oninput="onPageBgChange(\'gfrom\', this.value)"></div>'
+        + '<div class="layout-inspector-row"><label>To</label>'
+        + '<input type="color" value="'+gTo+'" oninput="onPageBgChange(\'gto\', this.value)"></div>'
+        + '<div class="layout-inspector-row"><label>Angle <span id="page_gang_lbl" style="color:#94a3b8;font-size:0.75rem">'+gAng+'°</span></label>'
+        + '<input type="range" min="0" max="360" value="'+gAng+'" style="width:7rem" oninput="onPageBgChange(\'gangle\', this.value);document.getElementById(\'page_gang_lbl\').textContent=this.value+\'°\'"></div>'
+        + '</div>');
+
+    rows.push('<div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.25rem">Toolbar</div>');
+    rows.push('<div class="layout-inspector-row"><label>Button bg</label>'
+        + '<input type="color" value="'+trayBg+'" oninput="onPageTrayChange(\'bg_color\', this.value)"></div>');
+    rows.push('<div class="layout-inspector-row"><label>Button text</label>'
+        + '<input type="color" value="'+trayBtn+'" oninput="onPageTrayChange(\'button_color\', this.value)"></div>');
+    rows.push('<div class="layout-inspector-row"><label>Accent</label>'
+        + '<input type="color" value="'+trayAccent+'" oninput="onPageTrayChange(\'accent_color\', this.value)"></div>');
+
+    return rows.join('');
+}
+
+function onPageBgType(t) {
+    window.TIMER_THEME.background = window.TIMER_THEME.background || {};
+    window.TIMER_THEME.background.type = t;
+    applyTheme(window.TIMER_THEME);
+    // Toggle the sub-blocks without re-rendering everything (preserves user's color-picker focus).
+    var solid = document.getElementById('page_solid_row');
+    var grad  = document.getElementById('page_grad_block');
+    var img   = document.getElementById('page_img_block');
+    if (solid) solid.style.display = (t==='color')    ? '' : 'none';
+    if (grad)  grad.style.display  = (t==='gradient') ? '' : 'none';
+    if (img)   img.style.display   = (t==='image')    ? '' : 'none';
+}
+
+function onPageBgChange(field, val) {
+    window.TIMER_THEME.background = window.TIMER_THEME.background || {};
+    var bg = window.TIMER_THEME.background;
+    if (field === 'color') bg.color = val;
+    else if (field === 'gfrom' || field === 'gto' || field === 'gangle') {
+        bg.gradient = bg.gradient || {};
+        if (field === 'gfrom') bg.gradient.from = val;
+        if (field === 'gto')   bg.gradient.to   = val;
+        if (field === 'gangle') bg.gradient.angle = parseInt(val, 10);
+    }
+    applyTheme(window.TIMER_THEME);
+}
+
+function onPageBgUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    var fd = new FormData();
+    fd.append('action', 'upload_theme_bg');
+    fd.append('csrf_token', CSRF);
+    fd.append('image', input.files[0]);
+    fetch('/timer_dl.php', { method:'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+            if (!j.ok) { alert(j.error || 'Upload failed'); return; }
+            window.TIMER_THEME.background = window.TIMER_THEME.background || {};
+            window.TIMER_THEME.background.image_url = j.url;
+            window.TIMER_THEME.background.type = 'image';
+            applyTheme(window.TIMER_THEME);
+            renderInspector('page');  // re-render to show filename + Remove button
+        });
+}
+
+function onPageBgClear() {
+    if (window.TIMER_THEME.background) {
+        window.TIMER_THEME.background.image_url = '';
+        window.TIMER_THEME.background.type = 'color';
+    }
+    applyTheme(window.TIMER_THEME);
+    renderInspector('page');
+}
+
+function onPageTrayChange(field, val) {
+    window.TIMER_THEME.tray = window.TIMER_THEME.tray || {};
+    window.TIMER_THEME.tray[field] = val;
+    applyTheme(window.TIMER_THEME);
+}
+
+function onInspectorColor(key, sub, val) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+    if (sub) pe['color_'+sub] = val;
+    else pe.color = val;
+    applyTheme(window.TIMER_THEME);
+}
+
+// Editable thresholds for the Clock's Warning / Critical color bands.
+function onClockThreshold(which, val) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements.clock = window.TIMER_THEME.elements.clock || {};
+    var n = Math.max(1, Math.min(86400, parseInt(val, 10) || 0));
+    if (which === 'warning') pe.warning_seconds = n;
+    else if (which === 'critical') pe.critical_seconds = n;
+    // No applyTheme needed — renderClock pulls from TIMER_THEME every tick.
+}
+
+function onInspectorScale(key, delta) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+    var v = Math.max(0.3, Math.min(3.0, (pe.scale || 1) + delta));
+    pe.scale = Math.round(v * 100) / 100;
+    var lbl = document.getElementById('ins_scale_' + key);
+    if (lbl) lbl.textContent = Math.round(pe.scale * 100) + '%';
+    applyTheme(window.TIMER_THEME);
+}
+
+function resetElementPosition(key) {
+    var pe = (window.TIMER_THEME.elements || {})[key];
+    if (pe) delete pe.pos;
+    // Re-capture from a sensible default so the element stays draggable.
+    if (LAYOUT_DEFAULT_POS[key]) pe.pos = { x: LAYOUT_DEFAULT_POS[key].x, y: LAYOUT_DEFAULT_POS[key].y };
+    applyTheme(window.TIMER_THEME);
+}
+
+function refreshHiddenInInspector() {
+    // If the currently inspected element had its visibility flipped, the panel button
+    // label needs updating. Just re-render.
+    if (LAYOUT_SELECTED_KEY) renderInspector(LAYOUT_SELECTED_KEY);
+}
+
+// ─── Generic "drag-by-header" helper for the pill & inspector panel ──
+function makePanelDraggable(panel, handle) {
+    if (!panel || !handle) return;
+    function start(ev) {
+        // Ignore drags that started on a button inside the handle (e.g. close).
+        if (ev.target.tagName === 'BUTTON') return;
+        ev.preventDefault();
+        var pt = ev.touches ? ev.touches[0] : ev;
+        var rect = panel.getBoundingClientRect();
+        var offX = pt.clientX - rect.left;
+        var offY = pt.clientY - rect.top;
+        // Once dragged, clear the centering transform so left/top are exact.
+        panel.style.transform = 'none';
+        function onMove(ev2) {
+            var p = ev2.touches ? ev2.touches[0] : ev2;
+            var nx = Math.max(0, Math.min(window.innerWidth  - rect.width,  p.clientX - offX));
+            var ny = Math.max(0, Math.min(window.innerHeight - rect.height, p.clientY - offY));
+            panel.style.left = nx + 'px';
+            panel.style.top  = ny + 'px';
+            panel.style.right = 'auto';
+        }
+        function onUp() {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            document.removeEventListener('touchmove', onMove);
+            document.removeEventListener('touchend', onUp);
+        }
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onUp);
+    }
+    handle.addEventListener('mousedown', start);
+    handle.addEventListener('touchstart', start, { passive: false });
+}
+
+// Wire up the pill and inspector header as drag handles on first load.
+(function() {
+    var pill = document.getElementById('layoutEditPill');
+    var pillHandle = document.getElementById('pillHandle');
+    makePanelDraggable(pill, pillHandle);
+    var insp = document.getElementById('layoutInspector');
+    var inspHeader = document.getElementById('inspectorHeader');
+    makePanelDraggable(insp, inspHeader);
+
+    // Body-level click handler — selects the "page" pseudo-element when the user
+    // clicks empty background space (in edit mode only).
+    document.addEventListener('click', function(ev) {
+        if (!LAYOUT_EDIT_ON) return;
+        if (ev.target.closest('.timer-positioned')) return;        // themable element
+        if (ev.target.closest('.layout-edit-pill')) return;        // pill chrome
+        if (ev.target.closest('.layout-inspector')) return;        // inspector chrome
+        if (ev.target.closest('.timer-levels-overlay')) return;    // any modal open
+        if (ev.target.closest('.layout-eye')) return;              // eye icon
+        selectElement('page');
+    });
+})();
+
+// Add `open` class behavior to theme overlay (mirrors levels overlay).
+(function(){
+    var style = document.createElement('style');
+    style.textContent = '.timer-levels-overlay#themeOverlay.open, .timer-levels-overlay#saveThemeOverlay.open { display:flex; align-items:center; justify-content:center; }';
+    document.head.appendChild(style);
+})();
+
 // ─── Init ─────────────────────────────────────────────────
+if (window.TIMER_THEME) applyTheme(window.TIMER_THEME);
 renderAll();
 startLocalTick(); // smooth second-by-second display between polls
 setInterval(pollState, POLL_INTERVAL); // everyone polls server — server is master
