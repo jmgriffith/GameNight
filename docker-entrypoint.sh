@@ -39,6 +39,28 @@ if [ ! -f "$VENDOR/nosleep.min.js" ]; then
     curl -fsSL https://cdn.jsdelivr.net/npm/nosleep.js@0.12.0/dist/NoSleep.min.js -o "$VENDOR/nosleep.min.js"
 fi
 
+# Self-hosted Google Fonts for the tournament timer theme system.
+# Downloaded from fonts.bunny.net (privacy-friendly Google Fonts mirror).
+if [ ! -f "$VENDOR/fonts/fonts.css" ]; then
+    echo "[entrypoint] Downloading timer fonts..."
+    mkdir -p "$VENDOR/fonts"
+    curl -fsSL -o "$VENDOR/fonts/inter-400.woff2"          https://fonts.bunny.net/inter/files/inter-latin-400-normal.woff2
+    curl -fsSL -o "$VENDOR/fonts/inter-700.woff2"          https://fonts.bunny.net/inter/files/inter-latin-700-normal.woff2
+    curl -fsSL -o "$VENDOR/fonts/bebas-neue-400.woff2"     https://fonts.bunny.net/bebas-neue/files/bebas-neue-latin-400-normal.woff2
+    curl -fsSL -o "$VENDOR/fonts/orbitron-400.woff2"       https://fonts.bunny.net/orbitron/files/orbitron-latin-400-normal.woff2
+    curl -fsSL -o "$VENDOR/fonts/orbitron-700.woff2"       https://fonts.bunny.net/orbitron/files/orbitron-latin-700-normal.woff2
+    curl -fsSL -o "$VENDOR/fonts/press-start-2p-400.woff2" https://fonts.bunny.net/press-start-2p/files/press-start-2p-latin-400-normal.woff2
+    cat > "$VENDOR/fonts/fonts.css" <<'FONTSCSS'
+/* Self-hosted Google Fonts (via fonts.bunny.net mirror). */
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: swap; src: url("/vendor/fonts/inter-400.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 700; font-display: swap; src: url("/vendor/fonts/inter-700.woff2") format("woff2"); }
+@font-face { font-family: "Bebas Neue"; font-style: normal; font-weight: 400; font-display: swap; src: url("/vendor/fonts/bebas-neue-400.woff2") format("woff2"); }
+@font-face { font-family: "Orbitron"; font-style: normal; font-weight: 400; font-display: swap; src: url("/vendor/fonts/orbitron-400.woff2") format("woff2"); }
+@font-face { font-family: "Orbitron"; font-style: normal; font-weight: 700; font-display: swap; src: url("/vendor/fonts/orbitron-700.woff2") format("woff2"); }
+@font-face { font-family: "Press Start 2P"; font-style: normal; font-weight: 400; font-display: swap; src: url("/vendor/fonts/press-start-2p-400.woff2") format("woff2"); }
+FONTSCSS
+fi
+
 # ── Scheduled tasks: run cron.php every 5 minutes in the background ──
 # Auto-generate a cron token if one doesn't exist yet
 CRON_TOKEN=$(php -r "require '/var/www/html/db.php'; \$t = get_setting('cron_token',''); if (\$t==='') { \$t = bin2hex(random_bytes(20)); set_setting('cron_token', \$t); } echo \$t;" 2>/dev/null || echo "")

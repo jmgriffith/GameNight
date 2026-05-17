@@ -198,6 +198,7 @@ $themeCss   = timer_theme_css_vars($themeProps);
     <title>Poker Timer &mdash; <?= htmlspecialchars($site_name) ?></title>
     <link rel="icon" href="/favicon.php">
     <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/vendor/fonts/fonts.css">
     <script>window.TIMER_THEME = <?= json_encode($themeProps, JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>; window.TIMER_THEME_ID = <?= $themeId ? (int)$themeId : 'null' ?>;</script>
     <style id="themeStyle"><?= $themeCss ?></style>
     <style>
@@ -836,6 +837,47 @@ $themeCss   = timer_theme_css_vars($themeProps);
             transform-origin: center;
             z-index: 4;  /* sit behind the text layer (z 20); above page bg */
         }
+        /* Generic per-element scale for free-positioned widgets that don't have
+           a custom #id.timer-positioned rule of their own. Element-scoped --el-scale
+           is set by applyTheme based on theme.elements[key].scale. ID-specific rules
+           (qr, image, streaming, etc.) override via higher specificity. */
+        .timer-positioned[data-has-scale] {
+            transform: translate(-50%, -50%) scale(var(--el-scale, 1));
+            transform-origin: center;
+        }
+        /* Streaming video iframe (positioned + resized like themeImage). */
+        .timer-stream {
+            width: 30vw;
+            aspect-ratio: 16 / 9;
+            pointer-events: auto;
+            background: #000;
+            /* Positioning + transform are owned by #streamingWrap.timer-positioned below
+               (higher specificity than the generic .timer-positioned rule). */
+        }
+        .timer-stream iframe { width: 100%; height: 100%; border: 0; display: block; }
+        /* Empty placeholder shown in edit mode when no URL is set yet. */
+        .timer-stream.is-empty {
+            background: repeating-linear-gradient(45deg,#1e293b,#1e293b 10px,#0f172a 10px,#0f172a 20px);
+            display: flex; align-items: center; justify-content: center;
+            color: #cbd5e1; font-size: .8rem; text-align: center; padding: .5rem;
+        }
+        /* In edit mode, let clicks reach the wrapper instead of the iframe so the user
+           can drag/select the panel. The iframe stays interactive in normal mode. */
+        body.layout-edit .timer-stream iframe { pointer-events: none; }
+        #streamingWrap.timer-positioned {
+            position: fixed;
+            left: var(--pos-x, 75%);
+            top:  var(--pos-y, 25%);
+            transform: translate(-50%, -50%) scale(var(--timer-stream-scale, 1));
+            transform-origin: center;
+            z-index: 4;
+        }
+        /* Info bar wraps when extra panels overflow narrow screens. */
+        .timer-info-bar { flex-wrap: wrap; }
+        /* Color variables for the three new info-bar stats. */
+        #rebuysWrap       { color: var(--timer-rebuys-color, #94a3b8); }
+        #chipsInPlayWrap  { color: var(--timer-chips-color, #94a3b8); }
+        #nextBreakWrap    { color: var(--timer-nextbreak-color, #94a3b8); }
         /* Center guides shown only in layout-edit mode. Subtle by default; brighten when
            an element snaps to them mid-drag. */
         .center-guide-v, .center-guide-h {
@@ -854,6 +896,39 @@ $themeCss   = timer_theme_css_vars($themeProps);
             background: rgba(251, 191, 36, 0.95);
             box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
         }
+        /* Smart-alignment guides — shown when the dragging element snaps to another
+           element's center axis. Positioned dynamically by makeDragStart. */
+        .align-guide-v, .align-guide-h {
+            position: fixed;
+            background: rgba(56, 189, 248, 0.95);
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+            pointer-events: none;
+            z-index: 6;
+            display: none;
+        }
+        .align-guide-v { top: 0; bottom: 0; width: 1px; }
+        .align-guide-h { left: 0; right: 0; height: 1px; }
+        .align-guide-v.is-snapping,
+        .align-guide-h.is-snapping { display: block; }
+        /* On-screen reminder about the Shift modifier (edit mode only). */
+        .snap-hint {
+            position: fixed;
+            bottom: 0.6rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.85);
+            color: #cbd5e1;
+            border: 1px solid #334155;
+            border-radius: 999px;
+            padding: 0.25rem 0.7rem;
+            font-size: 0.72rem;
+            letter-spacing: 0.02em;
+            z-index: 998;
+            display: none;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        body.layout-edit .snap-hint { display: inline-block; }
         body.layout-edit { user-select: none; -webkit-user-select: none; }
         body.layout-edit .timer-positioned,
         body.layout-edit .layout-draggable {
@@ -867,9 +942,9 @@ $themeCss   = timer_theme_css_vars($themeProps);
         body.layout-edit .timer-back { display: none !important; }
         .layout-edit-pill {
             position: fixed;
-            top: 1rem;
-            left: 50%;
-            transform: translateX(-50%);
+            top: 25%;
+            left: 25%;
+            transform: translate(-50%, -50%);
             z-index: 999;
             background: rgba(15, 23, 42, 0.95);
             border: 1px solid #475569;
@@ -982,6 +1057,7 @@ $themeCss   = timer_theme_css_vars($themeProps);
             padding: 0.2rem 0.55rem; cursor: pointer; font-size: 0.85rem;
         }
         .layout-inspector-row .ins-btn:hover { background: #475569; }
+        .layout-inspector-row .ins-btn.is-active { background: #2563eb; border-color: #2563eb; color: #fff; }
         .layout-inspector-row .ins-scale { min-width: 3rem; text-align: center; color: #94a3b8; font-size: 0.8rem; }
     </style>
 </head>
@@ -991,6 +1067,9 @@ $themeCss   = timer_theme_css_vars($themeProps);
 <!-- Center guides (visible while in layout-edit mode). -->
 <div class="center-guide-v" id="centerGuideV"></div>
 <div class="center-guide-h" id="centerGuideH"></div>
+<div class="align-guide-v" id="alignGuideV"></div>
+<div class="align-guide-h" id="alignGuideH"></div>
+<div class="snap-hint">Hold <b>Shift</b> to disable snap &nbsp;·&nbsp; <b>Ctrl</b>/<b>Cmd</b>+click to multi-select &amp; drag together</div>
 
 <!-- Floating control while in free-form layout edit mode (draggable). -->
 <div class="layout-edit-pill" id="layoutEditPill">
@@ -1043,6 +1122,9 @@ $themeCss   = timer_theme_css_vars($themeProps);
         <span class="timer-event-name" id="eventName"><?= htmlspecialchars($session['event_title'] ?? 'Tournament Timer') ?></span>
         <span class="timer-stat" id="playerWrap">Players: <b id="playerCount"><?= (int)($pool['still_playing'] ?? 0) ?>/<?= (int)($pool['bought_in'] ?? 0) ?></b></span>
         <span class="timer-stat" id="poolWrap">Pool: <b id="poolTotal">$<?= number_format(($pool['pool_total'] ?? 0) / 100, 2) ?></b></span>
+        <span class="timer-stat" id="rebuysWrap" style="display:none">Reentries: <b id="rebuysCount">0</b></span>
+        <span class="timer-stat" id="chipsInPlayWrap" style="display:none">Chips: <b id="chipsInPlayVal">0</b></span>
+        <span class="timer-stat" id="nextBreakWrap" style="display:none">Next break: <b id="nextBreakClock">--:--</b></span>
     </div>
 
     <!-- Main display -->
@@ -1124,6 +1206,12 @@ $themeCss   = timer_theme_css_vars($themeProps);
 <?php if (!$is_remote): ?>
 <!-- Themable user image (positioned + resized in edit mode) -->
 <img class="timer-image" id="themeImage" alt="" style="display:none">
+<!-- Streaming video iframe (positioned + resized in edit mode) -->
+<div class="timer-stream" id="streamingWrap" style="display:none">
+    <iframe id="streamingFrame" frameborder="0"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowfullscreen></iframe>
+</div>
 <?php endif; ?>
 
 <?php if (!$is_remote): ?>
@@ -1361,6 +1449,10 @@ var SESSION_ID = <?= json_encode($session ? (int)$session['id'] : null) ?>;
 var REMOTE_KEY = <?= json_encode($remote_key) ?>;
 var CSRF = <?= json_encode($csrf) ?>;
 var POLL_INTERVAL = 2000; // everyone polls server every 2s
+// Touch/mobile detection — used to skip rendering the streaming iframe on phones/tablets,
+// because cross-origin iframes capture taps that would otherwise re-acquire the wake lock.
+// Same heuristic the wake-lock banner uses (line ~1802).
+var IS_TOUCH_DEVICE = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
 
 var TIMER = {
     current_level: <?= (int)($timer['current_level'] ?? 1) ?>,
@@ -1409,6 +1501,32 @@ function getLevelData(num) {
         if (parseInt(LEVELS[i].level_number) === num) return LEVELS[i];
     }
     return null;
+}
+
+// Seconds remaining until the next break level (current + full durations of
+// intervening non-break levels). Returns null if no future break exists.
+function computeNextBreakSeconds() {
+    if (!LEVELS || !LEVELS.length) return null;
+    var curIdx = -1;
+    for (var i = 0; i < LEVELS.length; i++) {
+        if (parseInt(LEVELS[i].level_number) === TIMER.current_level) { curIdx = i; break; }
+    }
+    if (curIdx < 0) return null;
+    if (parseInt(LEVELS[curIdx].is_break)) return 0;  // currently on a break
+    var total = Math.max(0, parseInt(TIMER.time_remaining_seconds) || 0);
+    for (var j = curIdx + 1; j < LEVELS.length; j++) {
+        if (parseInt(LEVELS[j].is_break)) return total;
+        total += (parseInt(LEVELS[j].duration_minutes) || 0) * 60;
+    }
+    return null;
+}
+
+function fmtBreakClock(secs) {
+    var h = Math.floor(secs / 3600);
+    var m = Math.floor((secs % 3600) / 60);
+    var s = secs % 60;
+    var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+    return h > 0 ? (h + ':' + pad(m) + ':' + pad(s)) : (pad(m) + ':' + pad(s));
 }
 
 // ─── Render ───────────────────────────────────────────────
@@ -1476,19 +1594,50 @@ function renderAll() {
     var avgVal  = el('avgStackValue');
     if (avgWrap && avgVal) {
         var stillPlaying = POOL ? (POOL.still_playing || 0) : 0;
-        var startChips   = POOL ? (POOL.starting_chips || 0) : 0;
-        var addonChips   = POOL ? (POOL.addon_chips || 0) : 0;
-        var totalBuyins  = POOL ? (POOL.total_buyins  || 0) : 0;
-        var totalRebuys  = POOL ? (POOL.total_rebuys  || 0) : 0;
-        var totalAddons  = POOL ? (POOL.total_addons  || 0) : 0;
-        if (GAME_TYPE === 'tournament' && stillPlaying > 0 && startChips > 0) {
-            var chipsInPlay = (totalBuyins + totalRebuys) * startChips + totalAddons * addonChips;
+        var chipsInPlay  = POOL ? (POOL.chips_in_play || 0) : 0;
+        if (GAME_TYPE === 'tournament' && stillPlaying > 0 && chipsInPlay > 0) {
             var avg = Math.round(chipsInPlay / stillPlaying);
             avgVal.textContent = avg.toLocaleString();
             avgWrap.style.display = '';
         } else {
             avgWrap.style.display = _inEdit ? '' : 'none';
             if (_inEdit && !avgVal.textContent) avgVal.textContent = '-';
+        }
+    }
+
+    // Reentries (tournament only) — total rebuys across the field
+    var rbWrap = el('rebuysWrap'), rbVal = el('rebuysCount');
+    if (rbWrap && rbVal) {
+        if (GAME_TYPE === 'tournament' && POOL) {
+            rbVal.textContent = (POOL.total_rebuys || 0);
+            rbWrap.style.display = '';
+        } else {
+            rbWrap.style.display = _inEdit ? '' : 'none';
+        }
+    }
+
+    // Chips in play (tournament only) — server-computed, single source of truth
+    var cpWrap = el('chipsInPlayWrap'), cpVal = el('chipsInPlayVal');
+    if (cpWrap && cpVal) {
+        if (GAME_TYPE === 'tournament' && POOL && (POOL.chips_in_play || 0) > 0) {
+            cpVal.textContent = (POOL.chips_in_play || 0).toLocaleString();
+            cpWrap.style.display = '';
+        } else {
+            cpWrap.style.display = _inEdit ? '' : 'none';
+            if (_inEdit && !cpVal.textContent) cpVal.textContent = '0';
+        }
+    }
+
+    // Next break countdown (tournament only) — derived client-side from LEVELS
+    var nbWrap = el('nextBreakWrap'), nbVal = el('nextBreakClock');
+    if (nbWrap && nbVal) {
+        var nbSecs = (GAME_TYPE === 'tournament') ? computeNextBreakSeconds() : null;
+        if (nbSecs !== null) {
+            nbVal.textContent = fmtBreakClock(Math.max(0, nbSecs));
+            nbWrap.style.display = '';
+        } else {
+            nbWrap.style.display = _inEdit ? '' : 'none';
+            if (_inEdit) nbVal.textContent = '--:--';
         }
     }
 
@@ -1609,14 +1758,23 @@ function pollState() {
             if (ctrl) ctrl.style.display = CAN_CONTROL ? '' : 'none';
         }
         POOL = j.pool;
-        // Theme: if it changed under us (another tab edited it), re-apply.
-        // Skip while the theme editor is open so we don't clobber live preview.
+        // Theme: re-apply when the server version differs and we're not actively
+        // editing locally. The LAYOUT_EDIT_ON gate is critical — without it, this
+        // poll would clobber the user's in-progress edit (local pos values, panel
+        // toggles, etc.) every 2s with the server's stale snapshot.
+        // The themeOpen gate covers the library modal being open.
         if (j.theme && typeof applyTheme === 'function') {
             var themeOpen = document.getElementById('themeOverlay') && document.getElementById('themeOverlay').classList.contains('open');
-            if (!themeOpen && j.theme.id !== window.TIMER_THEME_ID) {
-                window.TIMER_THEME = j.theme.properties;
-                window.TIMER_THEME_ID = j.theme.id;
-                applyTheme(j.theme.properties);
+            if (!themeOpen && !LAYOUT_EDIT_ON) {
+                var newPropsStr = JSON.stringify(j.theme.properties || {});
+                var idChanged = (j.theme.id !== window.TIMER_THEME_ID);
+                var propsChanged = (newPropsStr !== window.TIMER_THEME_PROPS_JSON);
+                if (idChanged || propsChanged) {
+                    window.TIMER_THEME = j.theme.properties;
+                    window.TIMER_THEME_ID = j.theme.id;
+                    window.TIMER_THEME_PROPS_JSON = newPropsStr;
+                    applyTheme(j.theme.properties);
+                }
             }
         }
         renderAll();
@@ -1679,16 +1837,50 @@ function goFullscreen() {
 var wakeBanner = document.getElementById('wakeBanner');
 var wakeLock = null;
 var wakeLockAcquired = false;
+// NoSleep.js fallback (hidden silent video) — needed for iPhone Safari over
+// plain HTTP (LAN dev access) and any browser where navigator.wakeLock isn't
+// available. Loaded via /vendor/nosleep.min.js. Instantiate lazily so missing
+// vendor file doesn't throw.
+var noSleep = null;
+var noSleepEnabled = false;
+try { if (typeof NoSleep !== 'undefined') noSleep = new NoSleep(); } catch(e) {}
+
+function hideWakeBanner() {
+    if (!wakeBanner) return;
+    wakeBanner.style.opacity = '0';
+    setTimeout(function() { if (wakeBanner) wakeBanner.remove(); wakeBanner = null; }, 600);
+}
 
 async function requestWakeLock() {
     if (!('wakeLock' in navigator) || wakeLockAcquired) return;
     try {
         wakeLock = await navigator.wakeLock.request('screen');
         wakeLockAcquired = true;
-        // Hide banner on success
-        if (wakeBanner) { wakeBanner.style.opacity = '0'; setTimeout(function() { wakeBanner.remove(); }, 600); }
+        hideWakeBanner();
         wakeLock.addEventListener('release', function() { wakeLock = null; wakeLockAcquired = false; });
     } catch(e) {}
+}
+
+// Touch-device gesture handler: tries the modern API and the NoSleep fallback
+// in parallel, both inside the user-gesture window. iOS Safari over plain HTTP
+// has no navigator.wakeLock at all, so NoSleep is the only mechanism that works
+// for LAN dev access; on HTTPS production both engage and whichever sticks wins.
+function acquireWakeFromGesture() {
+    requestWakeLock();  // promise; gesture is captured at call time
+    if (noSleep && !noSleepEnabled) {
+        var p;
+        try { p = noSleep.enable(); } catch(e) { return; }
+        if (p && typeof p.then === 'function') {
+            p.then(function() {
+                noSleepEnabled = true;
+                hideWakeBanner();
+            }).catch(function() {});
+        } else {
+            // Older NoSleep builds return undefined synchronously.
+            noSleepEnabled = true;
+            hideWakeBanner();
+        }
+    }
 }
 
 // Hide banner on desktop (no need)
@@ -1696,16 +1888,17 @@ if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) {
     if (wakeBanner) wakeBanner.remove();
 }
 
-// Try on load
+// Try the modern API on load (no NoSleep yet — that needs a real gesture).
 requestWakeLock();
-// Acquire on user interaction (required by iOS Safari)
-document.addEventListener('click', function() { requestWakeLock(); }, true);
-document.addEventListener('touchend', function() { requestWakeLock(); }, true);
-// Re-acquire when tab becomes visible and immediately resync timer state
+// Acquire on user interaction (required by iOS Safari for either mechanism).
+document.addEventListener('click', acquireWakeFromGesture, true);
+document.addEventListener('touchend', acquireWakeFromGesture, true);
+// Re-acquire when tab becomes visible and immediately resync timer state.
 document.addEventListener('visibilitychange', function() {
     if (document.visibilityState === 'visible') {
         wakeLockAcquired = false;
         requestWakeLock();
+        // NoSleep needs a real gesture to re-enable, so we don't auto-restart it here.
         pollState(); // resync immediately — Android may have throttled intervals while hidden
     }
 });
@@ -2442,36 +2635,143 @@ function deletePreset() {
 var THEMES_CACHE = [];
 var CURRENT_THEME_ID = window.TIMER_THEME_ID || null;
 
+// Curated font options for text elements. Google Fonts are self-hosted under
+// /vendor/fonts/ (see fonts.css + docker-entrypoint.sh). Stack always falls back
+// to a sane system font in case the woff2 fails to load.
+var FONT_OPTIONS = [
+    { key: '',            label: 'Default',       stack: '' },
+    { key: 'system',      label: 'System',        stack: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' },
+    { key: 'sans',        label: 'Sans',          stack: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
+    { key: 'serif',       label: 'Serif',         stack: 'Georgia, "Times New Roman", Times, serif' },
+    { key: 'mono',        label: 'Monospace',     stack: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace' },
+    { key: 'inter',       label: 'Inter',         stack: '"Inter", system-ui, sans-serif' },
+    { key: 'bebas',       label: 'Bebas Neue',    stack: '"Bebas Neue", "Helvetica Neue", sans-serif' },
+    { key: 'orbitron',    label: 'Orbitron',      stack: '"Orbitron", "Helvetica Neue", sans-serif' },
+    { key: 'press-start', label: 'Press Start 2P',stack: '"Press Start 2P", monospace' },
+];
+var LETTER_SPACING_OPTIONS = [
+    { key: '',      label: 'Normal',  value: '' },
+    { key: 'tight', label: 'Tight',   value: '-0.02em' },
+    { key: 'wide',  label: 'Wide',    value: '0.05em' },
+    { key: 'wider', label: 'Wider',   value: '0.15em' },
+];
+function fontStackFor(key) {
+    for (var i = 0; i < FONT_OPTIONS.length; i++) if (FONT_OPTIONS[i].key === key) return FONT_OPTIONS[i].stack;
+    return '';
+}
+function letterSpacingFor(key) {
+    for (var i = 0; i < LETTER_SPACING_OPTIONS.length; i++) if (LETTER_SPACING_OPTIONS[i].key === key) return LETTER_SPACING_OPTIONS[i].value;
+    return '';
+}
+
 var THEME_ELEMENTS = [
-    { key:'event_name',   label:'Event name',    reorderable:false, hasClock:false },
-    { key:'player_count', label:'Player count',  reorderable:false, hasClock:false },
-    { key:'pool_total',   label:'Prize pool',    reorderable:false, hasClock:false },
-    { key:'level_label',  label:'Level label',   reorderable:true,  hasClock:false },
-    { key:'blinds',       label:'Blinds',        reorderable:true,  hasClock:false },
-    { key:'clock',        label:'Clock',         reorderable:true,  hasClock:true  },
-    { key:'paused_label', label:'Paused label',  reorderable:false, hasClock:false },
-    { key:'next_level',   label:'Next level',    reorderable:true,  hasClock:false },
-    { key:'avg_stack',    label:'Avg stack',     reorderable:false, hasClock:false },
-    { key:'payouts',      label:'Payouts',       reorderable:false, hasClock:false },
-    { key:'qr',           label:'QR code',       reorderable:false, hasClock:false, noColor:true },
-    { key:'image',        label:'Image',         reorderable:false, hasClock:false, noColor:true, hasUpload:true },
+    { key:'event_name',    label:'Event name',    reorderable:false, hasClock:false },
+    { key:'player_count',  label:'Player count',  reorderable:false, hasClock:false },
+    { key:'pool_total',    label:'Prize pool',    reorderable:false, hasClock:false },
+    { key:'level_label',   label:'Level label',   reorderable:true,  hasClock:false },
+    { key:'blinds',        label:'Blinds',        reorderable:true,  hasClock:false },
+    { key:'clock',         label:'Clock',         reorderable:true,  hasClock:true  },
+    { key:'paused_label',  label:'Paused label',  reorderable:false, hasClock:false },
+    { key:'next_level',    label:'Next level',    reorderable:true,  hasClock:false },
+    { key:'avg_stack',     label:'Avg stack',     reorderable:false, hasClock:false },
+    { key:'payouts',       label:'Payouts',       reorderable:false, hasClock:false },
+    { key:'qr',            label:'QR code',       reorderable:false, hasClock:false, noColor:true },
+    { key:'image',         label:'Image',         reorderable:false, hasClock:false, noColor:true, hasUpload:true },
+    { key:'rebuys',        label:'Reentries',     reorderable:false, hasClock:false },
+    { key:'chips_in_play', label:'Chips in play', reorderable:false, hasClock:false },
+    { key:'next_break',    label:'Next break',    reorderable:false, hasClock:false },
+    { key:'streaming',     label:'Stream',        reorderable:false, hasClock:false, noColor:true, hasStreamUrl:true },
 ];
 
 // Element key → CSS selector (used to apply visibility + order).
 var THEME_SELECTORS = {
-    event_name:   '.timer-event-name',
-    player_count: '#playerWrap',
-    pool_total:   '#poolWrap',
-    level_label:  '.timer-level-label',
-    blinds:       '.timer-blinds',
-    clock:        '.timer-clock',
-    paused_label: '#pausedLabel',
-    next_level:   '.timer-next',
-    avg_stack:    '#avgStackWrap',
-    payouts:      '#payoutsWrap',
-    qr:           '#qrWrap',
-    image:        '#themeImage',
+    event_name:    '.timer-event-name',
+    player_count:  '#playerWrap',
+    pool_total:    '#poolWrap',
+    level_label:   '.timer-level-label',
+    blinds:        '.timer-blinds',
+    clock:         '.timer-clock',
+    paused_label:  '#pausedLabel',
+    next_level:    '.timer-next',
+    avg_stack:     '#avgStackWrap',
+    payouts:       '#payoutsWrap',
+    qr:            '#qrWrap',
+    image:         '#themeImage',
+    rebuys:        '#rebuysWrap',
+    chips_in_play: '#chipsInPlayWrap',
+    next_break:    '#nextBreakWrap',
+    streaming:     '#streamingWrap',
 };
+
+// Normalize a user-pasted streaming URL into a safe embed URL.
+// Returns '' for anything we don't recognize so the iframe stays blank rather
+// than loading an arbitrary cross-origin page. Twitch needs a parent= param
+// matching the embedding hostname — sourced from location.hostname so it works
+// in both dev (localhost) and prod (gamenight.poker) without any settings.
+function normalizeStreamUrl(raw) {
+    if (!raw) return '';
+    raw = String(raw).trim();
+    var u;
+    try { u = new URL(raw); } catch (e) { return ''; }
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+    var h = u.hostname.replace(/^www\./, '').toLowerCase();
+    // YouTube — full watch URL, short youtu.be, embed/, live/, shorts/.
+    if (h === 'youtube.com' || h === 'm.youtube.com' || h === 'music.youtube.com') {
+        var v = u.searchParams.get('v');
+        if (v) return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v);
+        var m = u.pathname.match(/^\/(?:embed|live|shorts)\/([\w-]{6,})/);
+        if (m) return 'https://www.youtube-nocookie.com/embed/' + m[1];
+    }
+    if (h === 'youtu.be') {
+        var id = u.pathname.replace(/^\//, '').split('/')[0];
+        if (id) return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id);
+    }
+    // YouTube TV — extract the ID from /watch/<id> and try as a regular YouTube embed.
+    // Live TV / subscription-gated content won't actually play (YouTube returns "Video
+    // unavailable" inside the iframe), but VOD that's also on plain YouTube will.
+    if (h === 'tv.youtube.com') {
+        var mtv = u.pathname.match(/^\/watch\/([\w-]{6,})/);
+        if (mtv) return 'https://www.youtube-nocookie.com/embed/' + mtv[1];
+    }
+    if (h === 'youtube-nocookie.com') {
+        return raw;
+    }
+    // Twitch — first path segment is the channel name.
+    if (h === 'twitch.tv') {
+        var ch = u.pathname.replace(/^\//, '').split('/')[0];
+        if (ch) return 'https://player.twitch.tv/?channel=' + encodeURIComponent(ch)
+            + '&parent=' + encodeURIComponent(location.hostname || 'localhost');
+    }
+    if (h === 'player.twitch.tv') {
+        // Already an embed — ensure parent matches the current host.
+        u.searchParams.set('parent', location.hostname || 'localhost');
+        return u.toString();
+    }
+    // Vimeo — public video URL like vimeo.com/123456789 or vimeo.com/channels/x/123.
+    // Extract the numeric video ID (last numeric path segment) and use player.vimeo.com.
+    if (h === 'vimeo.com') {
+        var vparts = u.pathname.split('/').filter(Boolean);
+        for (var vi = vparts.length - 1; vi >= 0; vi--) {
+            if (/^\d{5,}$/.test(vparts[vi])) {
+                return 'https://player.vimeo.com/video/' + vparts[vi];
+            }
+        }
+    }
+    if (h === 'player.vimeo.com') return raw;
+    // Kick — channel URL like kick.com/<channel>. Embed lives at player.kick.com/<channel>.
+    if (h === 'kick.com') {
+        var kch = u.pathname.replace(/^\//, '').split('/')[0];
+        if (kch) return 'https://player.kick.com/' + encodeURIComponent(kch);
+    }
+    if (h === 'player.kick.com') return raw;
+    // Prime Video — best-effort pass-through. Amazon's X-Frame-Options usually
+    // refuses iframe embedding for consumer URLs; the inspector warns the user.
+    if (h === 'primevideo.com' || h === 'amazon.com' || h.endsWith('.amazon.com')) {
+        return raw;
+    }
+    // Unknown host — render nothing (safer than allowing arbitrary embeds).
+    return '';
+}
 
 // Map element key → list of CSS custom properties it controls.
 function applyTheme(props) {
@@ -2512,8 +2812,46 @@ function applyTheme(props) {
     }
     if (el.next_level)   { root.setProperty('--timer-next-color', el.next_level.color || '#94a3b8');   root.setProperty('--timer-next-scale', String(el.next_level.scale || 1)); }
     if (el.paused_label) { root.setProperty('--timer-paused-color', el.paused_label.color || '#fbbf24'); root.setProperty('--timer-paused-scale', String(el.paused_label.scale || 1)); }
-    if (el.avg_stack)    root.setProperty('--timer-avgstack-color', el.avg_stack.color || '#94a3b8');
-    if (el.payouts)      root.setProperty('--timer-payouts-color', el.payouts.color || '#94a3b8');
+    if (el.avg_stack)     root.setProperty('--timer-avgstack-color', el.avg_stack.color || '#94a3b8');
+    if (el.payouts)       root.setProperty('--timer-payouts-color', el.payouts.color || '#94a3b8');
+    if (el.rebuys)        root.setProperty('--timer-rebuys-color', el.rebuys.color || '#94a3b8');
+    if (el.chips_in_play) root.setProperty('--timer-chips-color', el.chips_in_play.color || '#94a3b8');
+    if (el.next_break)    root.setProperty('--timer-nextbreak-color', el.next_break.color || '#94a3b8');
+
+    // Generic per-element scale (transform-based) for widgets that don't have their
+    // own bespoke scale rule. The matching CSS selector `.timer-positioned[data-has-scale]`
+    // reads --el-scale set on each node. Also applies the per-element color inline for
+    // elements whose color wasn't already wired via a root-level CSS var (e.g. pool_total).
+    var SCALABLE_INFO_KEYS = ['player_count','pool_total','avg_stack','payouts','rebuys','chips_in_play','next_break'];
+    SCALABLE_INFO_KEYS.forEach(function(k) {
+        var pe = el[k];
+        if (!pe) return;
+        var sel = THEME_SELECTORS[k];
+        var n = sel && document.querySelector(sel);
+        if (!n) return;
+        n.style.setProperty('--el-scale', String(pe.scale || 1));
+        n.dataset.hasScale = '1';
+        // pool_total has no dedicated color CSS var — apply directly. Others already
+        // pick up their color via the root-level vars set above, so we don't double-apply.
+        if (k === 'pool_total' && pe.color) n.style.color = pe.color;
+    });
+
+    // Font controls — for every text element with a DOM node and a selector, apply
+    // font-family/weight/style/letter-spacing/text-transform from the theme. Empty
+    // strings clear any prior inline value so the element falls back to CSS defaults.
+    THEME_ELEMENTS.forEach(function(meta) {
+        if (meta.noColor) return;  // QR / image / streaming aren't text
+        var pe = el[meta.key];
+        if (!pe) return;
+        var sel = THEME_SELECTORS[meta.key];
+        var n = sel && document.querySelector(sel);
+        if (!n) return;
+        n.style.fontFamily     = fontStackFor(pe.font || '');
+        n.style.fontWeight     = pe.bold ? '700' : '';
+        n.style.fontStyle      = pe.italic ? 'italic' : '';
+        n.style.letterSpacing  = letterSpacingFor(pe.letter_spacing || '');
+        n.style.textTransform  = pe.uppercase ? 'uppercase' : '';
+    });
     if (el.qr) {
         var qrNode = document.getElementById('qrWrap');
         if (qrNode) qrNode.style.setProperty('--timer-qr-scale', String(el.qr.scale || 1));
@@ -2543,6 +2881,49 @@ function applyTheme(props) {
         } else {
             imgNode.removeAttribute('src');
             imgNode.style.display = 'none';
+        }
+    }
+
+    // Apply the streaming iframe (src + scale). Clear src on hide to stop audio.
+    // In edit mode with no URL, render a placeholder so the user can find/drag the panel.
+    var streamWrap  = document.getElementById('streamingWrap');
+    var streamFrame = document.getElementById('streamingFrame');
+    if (streamWrap && streamFrame) {
+        var s = el.streaming || {};
+        // Skip the iframe on touch devices: cross-origin iframes capture taps that would
+        // otherwise re-acquire the wake lock, which makes "tap anywhere to keep screen on"
+        // unreliable on phones/tablets. URL can still be configured (it shows on desktop/TV).
+        var emb = (s.url && GAME_TYPE !== 'cash' && !IS_TOUCH_DEVICE) ? normalizeStreamUrl(s.url) : '';
+        var inEditNow = document.body.classList.contains('layout-edit');
+        streamWrap.style.setProperty('--timer-stream-scale', String(s.scale || 1));
+        if (emb) {
+            if (streamFrame.getAttribute('src') !== emb) streamFrame.setAttribute('src', emb);
+            streamFrame.style.display = '';
+            streamWrap.classList.remove('is-empty');
+            var ph = document.getElementById('streamingPlaceholder');
+            if (ph) ph.remove();
+            delete streamWrap.dataset.placeholderSet;
+            streamWrap.style.display = (s.visible === false && !inEditNow) ? 'none' : '';
+        } else {
+            // No URL — clear iframe src so nothing autoplays.
+            streamFrame.removeAttribute('src');
+            if (inEditNow) {
+                // Show a labeled placeholder inside the wrapper so the user can see and click it.
+                streamFrame.style.display = 'none';
+                streamWrap.classList.add('is-empty');
+                if (!streamWrap.dataset.placeholderSet) {
+                    var label = document.createElement('div');
+                    label.id = 'streamingPlaceholder';
+                    label.style.cssText = 'pointer-events:none;font-weight:600;line-height:1.3';
+                    label.textContent = 'Stream — click to add a URL (Page panel)';
+                    streamWrap.appendChild(label);
+                    streamWrap.dataset.placeholderSet = '1';
+                }
+                streamWrap.style.display = '';
+            } else {
+                streamWrap.classList.remove('is-empty');
+                streamWrap.style.display = 'none';
+            }
         }
     }
 
@@ -2788,18 +3169,22 @@ var LAYOUT_DRAG_HANDLERS = [];    // [{ node, handler }] for cleanup
 // Without these, the un-positioned element stays in flex flow and gets overlapped by
 // other elements that DID get positioned out of flow.
 var LAYOUT_DEFAULT_POS = {
-    event_name:   { x: 50, y: 4 },
-    player_count: { x: 35, y: 8 },
-    pool_total:   { x: 65, y: 8 },
-    level_label:  { x: 50, y: 22 },
-    blinds:       { x: 50, y: 38 },
-    clock:        { x: 50, y: 60 },
-    paused_label: { x: 50, y: 78 },
-    next_level:   { x: 50, y: 88 },
-    avg_stack:    { x: 8,  y: 14 },
-    payouts:      { x: 92, y: 14 },
-    qr:           { x: 94, y: 92 },
-    image:        { x: 50, y: 50 },
+    event_name:    { x: 50, y: 4 },
+    player_count:  { x: 35, y: 8 },
+    pool_total:    { x: 65, y: 8 },
+    level_label:   { x: 50, y: 22 },
+    blinds:        { x: 50, y: 38 },
+    clock:         { x: 50, y: 60 },
+    paused_label:  { x: 50, y: 78 },
+    next_level:    { x: 50, y: 88 },
+    avg_stack:     { x: 8,  y: 14 },
+    payouts:       { x: 92, y: 14 },
+    qr:            { x: 94, y: 92 },
+    image:         { x: 50, y: 50 },
+    rebuys:        { x: 30, y: 12 },
+    chips_in_play: { x: 50, y: 12 },
+    next_break:    { x: 70, y: 12 },
+    streaming:     { x: 75, y: 30 },
 };
 
 function enterLayoutEdit() {
@@ -2959,7 +3344,7 @@ function makeWheelScale(key) {
         var delta = ev.deltaY < 0 ? step : -step;
         window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
         var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
-        var v = Math.max(0.3, Math.min(3.0, (pe.scale || 1) + delta));
+        var v = Math.max(0.3, Math.min(6.0, (pe.scale || 1) + delta));
         pe.scale = Math.round(v * 100) / 100;
         applyTheme(window.TIMER_THEME);
         // If the inspector is showing this element, refresh its size label.
@@ -3016,17 +3401,100 @@ function makeDragStart(node, key) {
         if (ev.target.closest('.layout-eye')) return;  // eye icon owns its own clicks
         ev.preventDefault();
         ev.stopPropagation();
+
+        // Ctrl/Cmd state captured at mousedown — defines selection semantics on
+        // mouseup (toggle vs replace), and whether the element is part of a group drag.
+        var modifierKey = !!(ev.ctrlKey || ev.metaKey);
+
         var pt = ev.touches ? ev.touches[0] : ev;
         var startX = pt.clientX, startY = pt.clientY;
         var rect = node.getBoundingClientRect();
         var offX = pt.clientX - (rect.left + rect.width / 2);
         var offY = pt.clientY - (rect.top  + rect.height / 2);
+        // Dragging element's half-dimensions in % of viewport (stable during drag).
+        var halfWdr = (rect.width  / window.innerWidth)  * 50;
+        var halfHdr = (rect.height / window.innerHeight) * 50;
         var moved = false;
         var THRESH = 5;
 
-        var SNAP_PCT = 2;  // distance (in % of viewport) for a mild snap to center
-        var guideV = document.getElementById('centerGuideV');
-        var guideH = document.getElementById('centerGuideH');
+        var SNAP_PCT       = 2;    // snap-to-center distance (% of viewport)
+        var ALIGN_SNAP_PCT = 1.5;  // tighter — snap-to-other-element distance
+        var guideV  = document.getElementById('centerGuideV');
+        var guideH  = document.getElementById('centerGuideH');
+        var alignV  = document.getElementById('alignGuideV');
+        var alignH  = document.getElementById('alignGuideH');
+
+        // Group-drag set: if this element is part of an existing multi-selection (and
+        // it's not a Ctrl-click, which would be a toggle intent), move everything in the
+        // selection together with the same delta. Otherwise drag this one alone.
+        // Don't mutate the selection itself here — that happens on mouseup if !moved.
+        var groupKeys;
+        if (!modifierKey && LAYOUT_SELECTION_SET.has(key) && LAYOUT_SELECTION_SET.size > 1) {
+            groupKeys = Array.from(LAYOUT_SELECTION_SET);
+        } else {
+            groupKeys = [key];
+        }
+        var groupStart = {};
+        groupKeys.forEach(function(gk) {
+            var ge = window.TIMER_THEME.elements && window.TIMER_THEME.elements[gk];
+            if (ge && ge.pos && typeof ge.pos.x === 'number') {
+                groupStart[gk] = { x: ge.pos.x, y: ge.pos.y };
+            }
+        });
+
+        // Snapshot every other positioned element's center + half-dimensions so
+        // snap math doesn't repeatedly hit the layout engine during mousemove.
+        // Exclude the group itself (we shouldn't snap a group to one of its own members).
+        var others = (window.TIMER_THEME && window.TIMER_THEME.elements) || {};
+        var groupSet = {}; groupKeys.forEach(function(gk){ groupSet[gk] = 1; });
+        var othersGeom = [];
+        for (var ok in others) {
+            if (groupSet[ok]) continue;
+            var op = others[ok] && others[ok].pos;
+            if (!op || typeof op.x !== 'number' || typeof op.y !== 'number') continue;
+            var sel = THEME_SELECTORS[ok];
+            if (!sel) continue;
+            var otherNode = document.querySelector(sel);
+            if (!otherNode) continue;
+            var orect = otherNode.getBoundingClientRect();
+            if (orect.width < 1 || orect.height < 1) continue;
+            othersGeom.push({
+                x: op.x, y: op.y,
+                halfW: (orect.width  / window.innerWidth)  * 50,
+                halfH: (orect.height / window.innerHeight) * 50,
+            });
+        }
+
+        // For each other element produce 9 candidate snap targets per axis:
+        // center↔center, edge↔edge (4 combos), and edge↔center (4 combos).
+        // First hit within ALIGN_SNAP_PCT wins; guideAt is the shared coordinate
+        // where the alignment line gets drawn.
+        function snapAxis(cur, isX) {
+            for (var i = 0; i < othersGeom.length; i++) {
+                var o = othersGeom[i];
+                var oc = isX ? o.x : o.y;
+                var oh = isX ? o.halfW : o.halfH;
+                var dh = isX ? halfWdr : halfHdr;
+                var cands = [
+                    [oc,             oc],            // center ↔ center
+                    [oc - oh + dh,   oc - oh],       // dragging-left  ↔ other-left
+                    [oc + oh + dh,   oc + oh],       // dragging-left  ↔ other-right
+                    [oc - oh - dh,   oc - oh],       // dragging-right ↔ other-left
+                    [oc + oh - dh,   oc + oh],       // dragging-right ↔ other-right
+                    [oc + dh,        oc],            // dragging-left  ↔ other-center
+                    [oc - dh,        oc],            // dragging-right ↔ other-center
+                    [oc - oh,        oc - oh],       // dragging-center↔ other-left
+                    [oc + oh,        oc + oh],       // dragging-center↔ other-right
+                ];
+                for (var c = 0; c < cands.length; c++) {
+                    if (Math.abs(cur - cands[c][0]) < ALIGN_SNAP_PCT) {
+                        return { snap: cands[c][0], guideAt: cands[c][1] };
+                    }
+                }
+            }
+            return null;
+        }
+
         function onMove(ev2) {
             var p = ev2.touches ? ev2.touches[0] : ev2;
             if (!moved && (Math.abs(p.clientX - startX) > THRESH || Math.abs(p.clientY - startY) > THRESH)) {
@@ -3036,19 +3504,65 @@ function makeDragStart(node, key) {
             ev2.preventDefault();
             var cx = ((p.clientX - offX) / window.innerWidth)  * 100;
             var cy = ((p.clientY - offY) / window.innerHeight) * 100;
-            // Mild snap to viewport center lines.
-            var snapX = Math.abs(cx - 50) < SNAP_PCT;
-            var snapY = Math.abs(cy - 50) < SNAP_PCT;
-            if (snapX) cx = 50;
-            if (snapY) cy = 50;
+
+            // Shift bypasses all snapping for fine adjustments.
+            var snapDisabled = !!ev2.shiftKey;
+
+            var snapX = false, snapY = false;
+            var alignedX = null, alignedY = null;
+
+            if (!snapDisabled) {
+                // Snap to viewport center lines (yellow guide). Wins over smart guides.
+                snapX = Math.abs(cx - 50) < SNAP_PCT;
+                snapY = Math.abs(cy - 50) < SNAP_PCT;
+                if (snapX) cx = 50;
+                if (snapY) cy = 50;
+
+                // Smart edge/center snap to other elements (cyan guide).
+                if (!snapX) {
+                    var sx = snapAxis(cx, true);
+                    if (sx) { cx = sx.snap; alignedX = sx.guideAt; }
+                }
+                if (!snapY) {
+                    var sy = snapAxis(cy, false);
+                    if (sy) { cy = sy.snap; alignedY = sy.guideAt; }
+                }
+            }
+
             if (guideV) guideV.classList.toggle('is-snapping', snapX);
             if (guideH) guideH.classList.toggle('is-snapping', snapY);
+            if (alignV) {
+                if (alignedX !== null) { alignV.style.left = alignedX + '%'; alignV.classList.add('is-snapping'); }
+                else alignV.classList.remove('is-snapping');
+            }
+            if (alignH) {
+                if (alignedY !== null) { alignH.style.top = alignedY + '%'; alignH.classList.add('is-snapping'); }
+                else alignH.classList.remove('is-snapping');
+            }
+
             cx = Math.max(2, Math.min(98, cx));
             cy = Math.max(2, Math.min(98, cy));
-            node.style.setProperty('--pos-x', cx + '%');
-            node.style.setProperty('--pos-y', cy + '%');
-            window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
-            window.TIMER_THEME.elements[key].pos = { x: cx, y: cy };
+
+            // Apply the post-snap delta (from primary's starting position) to every
+            // group member. For a solo drag this loop just runs once for `key`.
+            var pStart = groupStart[key];
+            var deltaX = pStart ? (cx - pStart.x) : 0;
+            var deltaY = pStart ? (cy - pStart.y) : 0;
+            window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+            for (var gi = 0; gi < groupKeys.length; gi++) {
+                var gk = groupKeys[gi];
+                var gs = groupStart[gk];
+                if (!gs) continue;
+                var gcx = Math.max(2, Math.min(98, gs.x + deltaX));
+                var gcy = Math.max(2, Math.min(98, gs.y + deltaY));
+                var gn = document.querySelector(THEME_SELECTORS[gk]);
+                if (gn) {
+                    gn.style.setProperty('--pos-x', gcx + '%');
+                    gn.style.setProperty('--pos-y', gcy + '%');
+                }
+                window.TIMER_THEME.elements[gk] = window.TIMER_THEME.elements[gk] || {};
+                window.TIMER_THEME.elements[gk].pos = { x: gcx, y: gcy };
+            }
         }
         function onUp() {
             document.removeEventListener('mousemove', onMove);
@@ -3058,9 +3572,12 @@ function makeDragStart(node, key) {
             document.removeEventListener('touchcancel', onUp);
             if (guideV) guideV.classList.remove('is-snapping');
             if (guideH) guideH.classList.remove('is-snapping');
+            if (alignV) alignV.classList.remove('is-snapping');
+            if (alignH) alignH.classList.remove('is-snapping');
             if (!moved) {
-                // Treat as click → select element + open inspector.
-                selectElement(key);
+                // Treat as click. Ctrl/Cmd toggles multi-selection; plain click replaces.
+                if (modifierKey) toggleSelectElement(key);
+                else selectElement(key);
             }
         }
         document.addEventListener('mousemove', onMove);
@@ -3072,24 +3589,55 @@ function makeDragStart(node, key) {
 }
 
 // ─── Inspector (per-element properties panel) ─────────────
-var LAYOUT_SELECTED_KEY = null;
+var LAYOUT_SELECTED_KEY = null;          // primary selection — drives the inspector
+var LAYOUT_SELECTION_SET = new Set();    // all selected keys (always contains primary)
+
+function updateSelectionVisuals() {
+    document.querySelectorAll('.timer-positioned.is-selected').forEach(function(n){ n.classList.remove('is-selected'); });
+    LAYOUT_SELECTION_SET.forEach(function(k) {
+        var sel = THEME_SELECTORS[k];
+        var n = sel && document.querySelector(sel);
+        if (n) n.classList.add('is-selected');
+    });
+}
 
 function selectElement(key) {
+    // Plain click — replace selection with this single key.
+    LAYOUT_SELECTION_SET.clear();
+    if (key && THEME_SELECTORS[key]) LAYOUT_SELECTION_SET.add(key);
     LAYOUT_SELECTED_KEY = key;
-    document.querySelectorAll('.timer-positioned.is-selected').forEach(function(n){ n.classList.remove('is-selected'); });
-    // The 'page' pseudo-element has no DOM node — skip the outline step.
-    var sel = THEME_SELECTORS[key];
-    if (sel) {
-        var node = document.querySelector(sel);
-        if (node) node.classList.add('is-selected');
-    }
+    updateSelectionVisuals();
     renderInspector(key);
     var panel = document.getElementById('layoutInspector');
     if (panel) panel.classList.add('is-open');
 }
 
+function toggleSelectElement(key) {
+    // Ctrl/Cmd-click — add to or remove from multi-selection.
+    if (!THEME_SELECTORS[key]) return;
+    if (LAYOUT_SELECTION_SET.has(key)) {
+        LAYOUT_SELECTION_SET.delete(key);
+        if (LAYOUT_SELECTED_KEY === key) {
+            // Promote any remaining selection to primary.
+            LAYOUT_SELECTED_KEY = LAYOUT_SELECTION_SET.size > 0 ? LAYOUT_SELECTION_SET.values().next().value : null;
+        }
+    } else {
+        LAYOUT_SELECTION_SET.add(key);
+        if (!LAYOUT_SELECTED_KEY) LAYOUT_SELECTED_KEY = key;
+    }
+    updateSelectionVisuals();
+    if (LAYOUT_SELECTION_SET.size === 0) {
+        deselectElement();
+    } else {
+        renderInspector(LAYOUT_SELECTED_KEY);
+        var panel = document.getElementById('layoutInspector');
+        if (panel) panel.classList.add('is-open');
+    }
+}
+
 function deselectElement() {
     LAYOUT_SELECTED_KEY = null;
+    LAYOUT_SELECTION_SET.clear();
     document.querySelectorAll('.timer-positioned.is-selected').forEach(function(n){ n.classList.remove('is-selected'); });
     var panel = document.getElementById('layoutInspector');
     if (panel) panel.classList.remove('is-open');
@@ -3104,6 +3652,23 @@ function renderInspector(key) {
     if (key === 'page') {
         if (title) title.textContent = 'Page';
         body.innerHTML = renderPageInspector();
+        return;
+    }
+    // Multi-selection view — replaces per-element controls with a brief summary.
+    // Drag any selected element to move them all together.
+    if (LAYOUT_SELECTION_SET.size > 1) {
+        if (title) title.textContent = LAYOUT_SELECTION_SET.size + ' elements';
+        var labels = [];
+        LAYOUT_SELECTION_SET.forEach(function(sk) {
+            var m = THEME_ELEMENTS.find(function(e){ return e.key === sk; });
+            if (m) labels.push(m.label);
+        });
+        body.innerHTML = ''
+            + '<div style="color:#cbd5e1;font-size:.8rem;line-height:1.4">'
+            +   '<div style="margin-bottom:.4rem">Drag any selected element to move them all together.</div>'
+            +   '<div style="color:#94a3b8;font-size:.72rem">' + labels.join(', ') + '</div>'
+            +   '<div style="margin-top:.6rem;color:#94a3b8;font-size:.72rem">Ctrl/Cmd-click an element to add or remove from the selection.</div>'
+            + '</div>';
         return;
     }
     var meta = THEME_ELEMENTS.find(function(e){ return e.key === key; });
@@ -3168,6 +3733,38 @@ function renderInspector(key) {
         + '<div class="layout-inspector-row"><label>Position</label>'
         + '<button type="button" class="ins-btn" onclick="resetElementPosition(\''+key+'\')">&#8635; Reset</button></div>');
 
+    // Font controls — text elements only (skipped for QR/Image/Stream which are noColor).
+    if (!meta.noColor) {
+        var fontKey = pe.font || '';
+        var fontOpts = FONT_OPTIONS.map(function(f){
+            var sel = (f.key === fontKey) ? ' selected' : '';
+            return '<option value="'+f.key+'"'+sel+'>'+f.label+'</option>';
+        }).join('');
+        rows.push('<div class="layout-inspector-row"><label>Font</label>'
+            + '<select onchange="onInspectorFont(\''+key+'\',this.value)" class="ins-btn" style="padding:.2rem .4rem;min-width:8.5rem">'
+            + fontOpts + '</select></div>');
+
+        var lsKey = pe.letter_spacing || '';
+        var lsOpts = LETTER_SPACING_OPTIONS.map(function(s){
+            var sel = (s.key === lsKey) ? ' selected' : '';
+            return '<option value="'+s.key+'"'+sel+'>'+s.label+'</option>';
+        }).join('');
+        rows.push('<div class="layout-inspector-row"><label>Spacing</label>'
+            + '<select onchange="onInspectorLetterSpacing(\''+key+'\',this.value)" class="ins-btn" style="padding:.2rem .4rem;min-width:6rem">'
+            + lsOpts + '</select></div>');
+
+        // Bold / Italic / Uppercase as inline toggle buttons.
+        rows.push('<div class="layout-inspector-row"><label>Style</label>'
+            + '<span style="display:inline-flex;gap:.25rem">'
+            + '<button type="button" class="ins-btn'+(pe.bold?' is-active':'')+'" '
+            + 'onclick="onInspectorTextToggle(\''+key+'\',\'bold\',this)" title="Bold" style="font-weight:700;min-width:1.8rem">B</button>'
+            + '<button type="button" class="ins-btn'+(pe.italic?' is-active':'')+'" '
+            + 'onclick="onInspectorTextToggle(\''+key+'\',\'italic\',this)" title="Italic" style="font-style:italic;min-width:1.8rem">I</button>'
+            + '<button type="button" class="ins-btn'+(pe.uppercase?' is-active':'')+'" '
+            + 'onclick="onInspectorTextToggle(\''+key+'\',\'uppercase\',this)" title="Uppercase" style="font-size:.7rem;letter-spacing:.05em;min-width:2.6rem">AA</button>'
+            + '</span></div>');
+    }
+
     // Upload / Remove for elements that carry an image URL (image element).
     if (meta.hasUpload) {
         rows.push(''
@@ -3183,7 +3780,51 @@ function renderInspector(key) {
         }
     }
 
+    // Streaming URL input — YouTube / Twitch / Prime Video.
+    if (meta.hasStreamUrl) {
+        var safeUrl = (pe.url || '').replace(/"/g, '&quot;');
+        rows.push(''
+            + '<div class="layout-inspector-row"><label>URL</label>'
+            + '<input type="url" value="'+safeUrl+'" placeholder="YouTube / Twitch / Prime URL" '
+            + 'style="flex:1;min-width:11rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:.2rem .4rem;font-size:.8rem" '
+            + 'onchange="onStreamUrlChange(this.value)"></div>');
+        if (pe.url) {
+            rows.push(''
+                + '<div class="layout-inspector-row"><label>&nbsp;</label>'
+                + '<button type="button" class="ins-btn" style="background:#7f1d1d;border-color:#991b1b;color:#fff" onclick="onStreamUrlChange(\'\')">Clear URL</button></div>');
+            // Inline warning for hosts that commonly block iframe embedding.
+            try {
+                var h = (new URL(pe.url)).hostname.replace(/^www\./, '').toLowerCase();
+                if (h === 'primevideo.com' || h.endsWith('.amazon.com') || h === 'amazon.com') {
+                    rows.push('<div class="layout-inspector-row" style="color:#fbbf24;font-size:.75rem;line-height:1.3">'
+                        + 'Prime Video usually blocks iframe embedding (X-Frame-Options). Test before relying on this.</div>');
+                } else if (h === 'tv.youtube.com') {
+                    rows.push('<div class="layout-inspector-row" style="color:#fbbf24;font-size:.75rem;line-height:1.3">'
+                        + "YouTube TV live broadcasts are DRM-protected and won't embed. "
+                        + "We'll try the video ID as a regular YouTube embed — works only for clips that exist on plain YouTube too.</div>");
+                }
+            } catch (e) {}
+        }
+    }
+
     body.innerHTML = rows.join('');
+}
+
+// Streaming URL handler — paired with the inspector input above. Persists into
+// theme.elements.streaming and re-renders so the iframe picks up the change.
+function onStreamUrlChange(val) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements.streaming = window.TIMER_THEME.elements.streaming || {};
+    pe.url = (val || '').trim();
+    pe.visible = !!pe.url;
+    if (!pe.scale) pe.scale = 1;
+    if (!pe.pos && pe.url) {
+        pe.pos = { x: LAYOUT_DEFAULT_POS.streaming.x, y: LAYOUT_DEFAULT_POS.streaming.y };
+    }
+    applyTheme(window.TIMER_THEME);
+    detachAllDragHandlers();
+    attachAllDragHandlers();
+    renderInspector('streaming');
 }
 
 // Upload handler used by the Image element's inspector and the Page inspector "Add image" button.
@@ -3273,6 +3914,39 @@ function renderPageInspector() {
     rows.push('<div class="layout-inspector-row"><label>Accent</label>'
         + '<input type="color" value="'+trayAccent+'" oninput="onPageTrayChange(\'accent_color\', this.value)"></div>');
 
+    // Stream URL — placed in the Page inspector so it's discoverable without first
+    // clicking the (initially hidden) Stream element on the canvas. Bootstraps the
+    // element when set and selects it for further positioning.
+    var streamEl = (window.TIMER_THEME.elements && window.TIMER_THEME.elements.streaming) || {};
+    var streamUrl = (streamEl.url || '').replace(/"/g, '&quot;');
+    rows.push('<div style="font-size:0.75rem;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;margin:0.6rem 0 0.25rem">Stream</div>');
+    rows.push('<div class="layout-inspector-row"><label>URL</label>'
+        + '<input type="url" value="'+streamUrl+'" placeholder="YouTube / Twitch / Prime URL" '
+        + 'style="flex:1;min-width:11rem;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px;padding:.2rem .4rem;font-size:.8rem" '
+        + 'onchange="onStreamUrlChange(this.value);renderInspector(\'page\')"></div>');
+    if (streamEl.url) {
+        rows.push('<div class="layout-inspector-row"><label>&nbsp;</label>'
+            + '<button type="button" class="ins-btn" onclick="selectElement(\'streaming\')">Edit stream panel</button></div>');
+        rows.push('<div class="layout-inspector-row"><label>&nbsp;</label>'
+            + '<button type="button" class="ins-btn" style="background:#7f1d1d;border-color:#991b1b;color:#fff" '
+            + 'onclick="onStreamUrlChange(\'\');renderInspector(\'page\')">Clear stream URL</button></div>');
+        if (IS_TOUCH_DEVICE) {
+            rows.push('<div class="layout-inspector-row" style="color:#94a3b8;font-size:.72rem;line-height:1.3">'
+                + 'Hidden on this device: the stream iframe captures taps and would block the screen-wake handler. It will appear on desktop/TV viewers.</div>');
+        }
+        try {
+            var sh = (new URL(streamEl.url)).hostname.replace(/^www\./, '').toLowerCase();
+            if (sh === 'primevideo.com' || sh === 'amazon.com' || sh.endsWith('.amazon.com')) {
+                rows.push('<div class="layout-inspector-row" style="color:#fbbf24;font-size:.75rem;line-height:1.3">'
+                    + 'Prime Video usually blocks iframe embedding (X-Frame-Options). Test before relying on this.</div>');
+            } else if (sh === 'tv.youtube.com') {
+                rows.push('<div class="layout-inspector-row" style="color:#fbbf24;font-size:.75rem;line-height:1.3">'
+                    + "YouTube TV live broadcasts are DRM-protected and won't embed. "
+                    + "We'll try the video ID as a regular YouTube embed — works only for clips that exist on plain YouTube too.</div>");
+            }
+        } catch (e) {}
+    }
+
     return rows.join('');
 }
 
@@ -3343,6 +4017,30 @@ function onInspectorColor(key, sub, val) {
     applyTheme(window.TIMER_THEME);
 }
 
+function onInspectorFont(key, val) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+    pe.font = val || '';
+    applyTheme(window.TIMER_THEME);
+}
+function onInspectorLetterSpacing(key, val) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+    pe.letter_spacing = val || '';
+    applyTheme(window.TIMER_THEME);
+}
+function onInspectorTextToggle(key, prop, btnEl) {
+    window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
+    var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
+    pe[prop] = !pe[prop];
+    applyTheme(window.TIMER_THEME);
+    // Update the clicked button's active state in place instead of rebuilding the
+    // inspector body — a rebuild detaches the button mid-event-dispatch, which
+    // makes ev.target.closest('.layout-inspector') return null in the body click
+    // handler and falsely triggers a 'page' selection (click-through).
+    if (btnEl && btnEl.classList) btnEl.classList.toggle('is-active', !!pe[prop]);
+}
+
 // Editable thresholds for the Clock's Warning / Critical color bands.
 function onClockThreshold(which, val) {
     window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
@@ -3356,7 +4054,7 @@ function onClockThreshold(which, val) {
 function onInspectorScale(key, delta) {
     window.TIMER_THEME.elements = window.TIMER_THEME.elements || {};
     var pe = window.TIMER_THEME.elements[key] = window.TIMER_THEME.elements[key] || {};
-    var v = Math.max(0.3, Math.min(3.0, (pe.scale || 1) + delta));
+    var v = Math.max(0.3, Math.min(6.0, (pe.scale || 1) + delta));
     pe.scale = Math.round(v * 100) / 100;
     var lbl = document.getElementById('ins_scale_' + key);
     if (lbl) lbl.textContent = Math.round(pe.scale * 100) + '%';
@@ -3423,14 +4121,22 @@ function makePanelDraggable(panel, handle) {
     makePanelDraggable(insp, inspHeader);
 
     // Body-level click handler — selects the "page" pseudo-element when the user
-    // clicks empty background space (in edit mode only).
+    // clicks empty background space (in edit mode only). Walks composedPath instead
+    // of ev.target.closest so detached targets (e.g. an inspector button whose
+    // parent rebuilt mid-click) still resolve correctly against the skip list.
+    var SKIP_CLASSES = ['timer-positioned','layout-edit-pill','layout-inspector','timer-levels-overlay','layout-eye'];
     document.addEventListener('click', function(ev) {
         if (!LAYOUT_EDIT_ON) return;
-        if (ev.target.closest('.timer-positioned')) return;        // themable element
-        if (ev.target.closest('.layout-edit-pill')) return;        // pill chrome
-        if (ev.target.closest('.layout-inspector')) return;        // inspector chrome
-        if (ev.target.closest('.timer-levels-overlay')) return;    // any modal open
-        if (ev.target.closest('.layout-eye')) return;              // eye icon
+        var path = (typeof ev.composedPath === 'function') ? ev.composedPath() : [];
+        for (var i = 0; i < path.length; i++) {
+            var n = path[i];
+            if (!n || !n.classList) continue;
+            for (var c = 0; c < SKIP_CLASSES.length; c++) {
+                if (n.classList.contains(SKIP_CLASSES[c])) return;
+            }
+        }
+        // Fallback for browsers without composedPath (none we target, but harmless).
+        if (ev.target && ev.target.closest && ev.target.closest('.timer-positioned, .layout-edit-pill, .layout-inspector, .timer-levels-overlay, .layout-eye')) return;
         selectElement('page');
     });
 })();

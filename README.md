@@ -116,6 +116,16 @@ docker compose down
 docker compose up -d --build
 ```
 
+### Release flow (maintainer notes)
+
+Local edits go through a staging container before they reach `main` or the live site:
+
+1. Edit in the primary local clone (`~/Claude/GameNight`).
+2. Mirror each touched file to the dev clone (`~/Claude/GameNight-dev`), which runs the `gamenight-dev` container at <http://localhost:8080>. Mirror per-file — never bulk-rsync — so dev's local experiments, downloaded `vendor/`, `phpadmin/`, `config/config.php`, and `db/` stay untouched.
+3. Verify the change at <http://localhost:8080>. PHP/static edits update live via the bind-mount; if a rebuild is needed, run `docker compose up -d --build` inside `GameNight-dev`.
+4. Only after the dev verification passes: commit and `git push` from the primary clone.
+5. SSH to the production server and run the `git pull` / rebuild block above.
+
 ### Troubleshooting
 
 | Symptom | Cause | Fix |

@@ -7,6 +7,18 @@ All page files live in `www/`. Data endpoints (`*_dl.php`) are listed but not de
 
 ---
 
+## Dev → Git → Live Release Flow
+
+Changes ride through three environments before users see them:
+
+1. **Edit in `/home/bryce/Claude/GameNight`** — the source-of-truth working copy that pushes to GitHub.
+2. **Mirror to `/home/bryce/Claude/GameNight-dev`** — every file touched in step 1 is copied to the same relative path in the dev clone, which runs the `gamenight-dev` container at **http://localhost:8080**. The mirror is per-edit, not a bulk rsync, so dev's local experiments and downloaded vendor files stay intact. Excluded from mirroring: `docker-compose.yml`, `config/config.php`, `db/`, `uploads/`, `vendor/`, `phpadmin/`, `.git/`.
+3. **Verify locally** at http://localhost:8080. PHP/static edits are picked up live via the bind-mount; if a rebuild is needed, run `docker compose up -d --build` in `GameNight-dev`.
+4. **Push to git** *only after* the change is confirmed in dev: `git add` + `git commit` + `git push` from `GameNight`.
+5. **Deploy to live** by SSHing to `root@gamenight.poker` and running `git pull` (followed by `docker compose down && up -d --build` if the change requires a rebuild). Never scp from Windows — CRLF line endings corrupt PHP files.
+
+---
+
 ## Access Legend
 
 | Tag | Meaning |

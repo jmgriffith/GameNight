@@ -19,6 +19,10 @@ function timer_theme_defaults(): array {
             'payouts'      => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
             'qr'           => ['visible'=>true,'scale'=>1.0],
             'image'        => ['visible'=>false,'url'=>'','scale'=>1.0],
+            'rebuys'        => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+            'chips_in_play' => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+            'next_break'    => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
+            'streaming'     => ['visible'=>false,'scale'=>1.0,'url'=>''],
         ],
         'tray' => ['bg_color'=>'#1e293b','button_color'=>'#e2e8f0','accent_color'=>'#2563eb'],
     ];
@@ -87,6 +91,9 @@ function timer_theme_css_vars(array $props): string {
         '--timer-paused-color'   => $el['paused_label']['color'] ?? '#fbbf24',
         '--timer-avgstack-color' => $el['avg_stack']['color']    ?? '#94a3b8',
         '--timer-payouts-color'  => $el['payouts']['color']      ?? '#94a3b8',
+        '--timer-rebuys-color'    => $el['rebuys']['color']        ?? '#94a3b8',
+        '--timer-chips-color'     => $el['chips_in_play']['color'] ?? '#94a3b8',
+        '--timer-nextbreak-color' => $el['next_break']['color']    ?? '#94a3b8',
         '--timer-tray-button-bg' => $tray['bg_color']            ?? '#1e293b',
         '--timer-tray-button-color' => $tray['button_color']     ?? '#e2e8f0',
         '--timer-accent'         => $tray['accent_color']        ?? '#2563eb',
@@ -119,6 +126,10 @@ function timer_theme_css_vars(array $props): string {
         'payouts'      => '#payoutsWrap',
         'qr'           => '#qrWrap',
         'image'        => '#themeImage',
+        'rebuys'        => '#rebuysWrap',
+        'chips_in_play' => '#chipsInPlayWrap',
+        'next_break'    => '#nextBreakWrap',
+        'streaming'     => '#streamingWrap',
     ];
     foreach ($visMap as $key => $sel) {
         $visible = $el[$key]['visible'] ?? true;

@@ -495,26 +495,43 @@ function db_init(PDO $pdo): void {
     try {
         $has = (int)$pdo->query("SELECT COUNT(*) FROM timer_themes")->fetchColumn();
         if ($has === 0) {
-            $defaultProps = [
-                'background' => ['type'=>'color','color'=>'#0f172a','gradient'=>['from'=>'#0f172a','to'=>'#1e293b','angle'=>180],'image_url'=>''],
-                'elements'   => [
-                    'event_name'   => ['visible'=>true,'color'=>'#ffffff','scale'=>1.0],
-                    'player_count' => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
-                    'pool_total'   => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
-                    'level_label'  => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
-                    'blinds'       => ['visible'=>true,'color'=>'#ffffff','scale'=>1.0],
-                    'clock'        => ['visible'=>true,'color_green'=>'#22c55e','color_yellow'=>'#fbbf24','color_red'=>'#ef4444','scale'=>1.0,'warning_seconds'=>120,'critical_seconds'=>30],
-                    'paused_label' => ['visible'=>true,'color'=>'#fbbf24','scale'=>1.0],
-                    'next_level'   => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
-                    'avg_stack'    => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
-                    'payouts'      => ['visible'=>true,'color'=>'#94a3b8','scale'=>1.0],
-                    'qr'           => ['visible'=>true,'scale'=>1.0],
-                    'image'        => ['visible'=>false,'url'=>'','scale'=>1.0],
-                ],
-                'tray' => ['bg_color'=>'#1e293b','button_color'=>'#e2e8f0','accent_color'=>'#2563eb'],
-            ];
-            $stmt = $pdo->prepare("INSERT INTO timer_themes (name, created_by, is_default, is_global, properties) VALUES ('Classic Dark', 0, 1, 1, ?)");
-            $stmt->execute([json_encode($defaultProps)]);
+            // Default theme shipped with fresh installs. Snapshot of the curated
+            // layout — green/teal gradient background, panels positioned for a
+            // tournament table. Edit in the timer's theme editor and re-seed if you
+            // want a different look out of the box.
+            $defaultPropsJson = <<<'JSON'
+{
+  "background": {
+    "type": "gradient",
+    "color": "#0f172a",
+    "gradient": { "from": "#008000", "to": "#004040", "angle": 130 },
+    "image_url": ""
+  },
+  "elements": {
+    "event_name":    { "visible": true,  "color": "#ffffff", "scale": 1,    "pos": { "x": 50,    "y": 6.4 } },
+    "player_count":  { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 5.6,   "y": 35.1 } },
+    "pool_total":    { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 5.6,   "y": 31.7 } },
+    "level_label":   { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 50,    "y": 23.4 } },
+    "blinds":        { "visible": true,  "color": "#ffffff", "scale": 1,    "pos": { "x": 50,    "y": 33.9 } },
+    "clock":         { "visible": true,  "color_green": "#22c55e", "color_yellow": "#fbbf24", "color_red": "#ef4444",
+                       "scale": 1, "warning_seconds": 120, "critical_seconds": 30, "pos": { "x": 50, "y": 57.9 } },
+    "paused_label":  { "visible": true,  "color": "#ff0000", "scale": 6,    "pos": { "x": 50,    "y": 57.9 },
+                       "letter_spacing": "wider", "font": "serif", "bold": true, "italic": true, "uppercase": false },
+    "next_level":    { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 50,    "y": 82.1 } },
+    "avg_stack":     { "visible": true,  "color": "#94a3b8", "scale": 1.1,  "pos": { "x": 4.5,   "y": 8.3 } },
+    "payouts":       { "visible": true,  "color": "#94a3b8", "scale": 1.55, "pos": { "x": 90.8,  "y": 13.7 } },
+    "qr":            { "visible": true,                       "scale": 1.1, "pos": { "x": 93.8,  "y": 91.7 } },
+    "image":         { "visible": false, "url": "",           "scale": 1,    "pos": { "x": 50,    "y": 50 } },
+    "rebuys":        { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 4.5,   "y": 28.3 } },
+    "chips_in_play": { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 5.9,   "y": 24.9 } },
+    "next_break":    { "visible": true,  "color": "#94a3b8", "scale": 1,    "pos": { "x": 7.5,   "y": 21.9 } },
+    "streaming":     { "visible": false, "scale": 1,         "url": "",    "pos": { "x": 15.9,  "y": 88.0 } }
+  },
+  "tray": { "bg_color": "#1e293b", "button_color": "#e2e8f0", "accent_color": "#2563eb" }
+}
+JSON;
+            $stmt = $pdo->prepare("INSERT INTO timer_themes (name, created_by, is_default, is_global, properties) VALUES ('Default', 0, 1, 1, ?)");
+            $stmt->execute([$defaultPropsJson]);
         }
     } catch (Exception $e) {}
 

@@ -170,6 +170,10 @@ function calc_pool($db, $session_id) {
         'total_cash_in'  => (int)$r['total_cash_in'],
         'starting_chips' => (int)($s['starting_chips'] ?? 0),
         'addon_chips'    => (int)($s['addon_chips'] ?? 0),
+        'chips_in_play'  => ($s['game_type'] === 'tournament')
+            ? ((int)$r['total_buyins'] + (int)$r['total_rebuys']) * (int)($s['starting_chips'] ?? 0)
+              + (int)$r['total_addons'] * (int)($s['addon_chips'] ?? 0)
+            : 0,
     ];
 }
 

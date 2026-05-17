@@ -87,6 +87,27 @@ Schema and migrations live entirely in `db_init()` inside `www/db.php`. New colu
 - `db/` and `uploads/` directories must be owned by `www-data`
 - HTTP 500 on fresh deploy usually means wrong ownership on `db/`
 
+## Dev → Git → Live Flow
+
+There are two local clones of this repo:
+
+| Path | Container | URL | Role |
+|---|---|---|---|
+| `/home/bryce/Claude/GameNight` (this repo) | `gamenight` | local | **Edit here.** Source of truth for git. |
+| `/home/bryce/Claude/GameNight-dev` | `gamenight-dev` | http://localhost:8080 | **Test target.** Mirrors edits from GameNight before they ship. |
+
+**Per-edit sync rule:** every time you Edit/Write a file under this repo, immediately mirror it to the same relative path in `/home/bryce/Claude/GameNight-dev/`. Mirror only the files you touched — do **not** bulk-rsync, because `GameNight-dev` legitimately differs in dev-only paths: `docker-compose.yml` (dev container name + port), `config/config.php` (gitignored local config), `db/` and `uploads/` (runtime state), and `vendor/` / `www/phpadmin/phpliteadmin.php` (downloaded by `docker-entrypoint.sh`). Never mirror those paths or anything under `.git/`.
+
+If `GameNight` and `GameNight-dev` diverge on tracked source files, that almost always means one side hasn't pulled from origin — fix it with `git pull` rather than copying files around. The per-edit mirror is for **uncommitted** edits in transit, not for reconciling missed commits.
+
+**Push gate:** do not `git push` to origin until the user has tested at http://localhost:8080 and explicitly confirmed. The full sequence is:
+
+1. Edit in `GameNight` → mirror to `GameNight-dev` (same edit, same path).
+2. If the dev container is down or the change is server-side (PHP), restart it: `cd /home/bryce/Claude/GameNight-dev && docker compose up -d --build`. For pure PHP/static edits the bind-mount picks them up live — no rebuild needed.
+3. User verifies at http://localhost:8080.
+4. On confirmation: `git add` + `git commit` + `git push` from `GameNight`.
+5. Deploy to live: SSH `root@gamenight.poker` and `git pull` (see [Production server deploy flow](../.claude/projects/-home-bryce-Claude-GameNight/memory/project_server_repo_drift.md)); never scp from Windows (CRLF).
+
 ## Version
 
-Tracked manually in `www/version.php`. Bump the version number when committing significant changes.
+Tracked manually in `www/version.php`. **Bump exactly once per `git push`** — immediately before the commit that ships a change. Do not bump during in-dev troubleshooting iterations against the local `gamenight-dev` container; the version is a release marker for shipped commits, not a build counter for intermediate fix attempts.

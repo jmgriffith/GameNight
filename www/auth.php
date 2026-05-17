@@ -7,8 +7,26 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
-// CSP: allow inline scripts/styles (required by Jodit editor), block everything else external
-header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+// CSP: allow inline scripts/styles (required by Jodit editor), block everything else external.
+// frame-src allows the tournament-timer streaming panel to embed video (YouTube/Twitch/Prime).
+$_csp = implode('; ', [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https://*.ytimg.com https://*.twitch.tv https://*.jtvnw.net",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "frame-src https://www.youtube.com https://www.youtube-nocookie.com "
+        . "https://player.twitch.tv https://www.twitch.tv "
+        . "https://player.vimeo.com "
+        . "https://player.kick.com https://kick.com "
+        . "https://www.primevideo.com https://atv-ps.primevideo.com",
+    "media-src 'self' https: data:",
+]);
+header("Content-Security-Policy: {$_csp}");
+unset($_csp);
 // HSTS: enforce HTTPS for 1 year (only sent when already on HTTPS)
 if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')) {
     header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
