@@ -106,7 +106,7 @@ If `GameNight` and `GameNight-dev` diverge on tracked source files, that almost 
 2. If the dev container is down or the change is server-side (PHP), restart it: `cd /home/bryce/Claude/GameNight-dev && docker compose up -d --build`. For pure PHP/static edits the bind-mount picks them up live — no rebuild needed.
 3. User verifies at http://localhost:8080.
 4. On confirmation: `git add` + `git commit` + `git push` from `GameNight`.
-5. Deploy to live: SSH `root@gamenight.poker` and `git pull` (see [Production server deploy flow](../.claude/projects/-home-bryce-Claude-GameNight/memory/project_server_repo_drift.md)); never scp from Windows (CRLF).
+5. Deploy to live: SSH to the production server and `git pull`; never scp from Windows (CRLF).
 
 ## Version
 
