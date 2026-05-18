@@ -111,3 +111,7 @@ If `GameNight` and `GameNight-dev` diverge on tracked source files, that almost 
 ## Version
 
 Tracked manually in `www/version.php`. **Bump exactly once per `git push`** — immediately before the commit that ships a change. Do not bump during in-dev troubleshooting iterations against the local `gamenight-dev` container; the version is a release marker for shipped commits, not a build counter for intermediate fix attempts.
+
+## Changelog
+
+`CHANGELOG.md` updates ride in the same commit as the code that introduced them — never as a follow-up. When you bump `www/version.php` for a push, also add a new `## [vX.Y] — YYYY-MM-DD` block at the top of `CHANGELOG.md` (above the most recent existing entry), grouped under **Security / Added / Changed / Fixed / Infrastructure** as applicable. Match the long-form prose style of existing entries: lead with a bolded one-line summary, then 2–6 sentences explaining the *why*, the affected files/identifiers, and any operator notes. Stage `CHANGELOG.md` with the code files and `www/version.php` in the same `git add`.
