@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19249] — 2026-05-18
+
+### Added
+- **Streaming video auto-mutes during timer alarms (with 3s pre/post padding).** When the start-of-level chime, warning beeps, or end-of-level alarm fires, the streaming-video iframe is muted via `postMessage` for the duration of the alarm, then un-muted automatically. Prevents the stream's audio from drowning out the alert in a tournament room. The mute window is padded to start **3 seconds before** the alarm and continue **3 seconds after**, so the alert isn't fighting the stream's reverb at the moment it kicks in or the moment it ends. For the warning and end-of-level alarms the pre-mute is scheduled in `startLocalTick` at `time_remaining_seconds === warning_seconds+3` and `time_remaining_seconds === 6` respectively; the start-of-level chime is user-triggered so it gets post-padding only (4 s total). When the alarm itself fires inside the pre-mute window, `muteStreamForAlarm` refreshes the unmute timer reentrantly. Works for **YouTube** (the no-cookie embed URL now includes `enablejsapi=1` so its IFrame API accepts commands) and **Vimeo** (Player.js postMessage with `setMuted`). Twitch, Kick, and Prime Video don't expose a parent-controllable mute on the raw iframe, so they gracefully no-op; the first time an alarm fires against one of those streams the console logs a one-time hint naming the provider. A new **"Mute streaming video while alarms play"** checkbox in the Sound Settings dialog toggles the behaviour; the preference is per-device (`localStorage gn.muteStreamDuringAlarms`, defaults on) because each viewer's stream mute is local-only by nature. The hook lives inside `playStartTimer`, `playWarning`, and `playEndTimer`, so the sound-settings Test buttons also exercise the mute path. A `STREAM_MUTED_BY_ALARM` flag tracks whether we own the mute so we never un-mute a stream the user manually muted via the embed's own controls.
+
+---
+
 ## [v0.19248] — 2026-05-18
 
 ### Added

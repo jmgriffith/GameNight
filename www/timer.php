@@ -1432,6 +1432,12 @@ $themeCss   = timer_theme_css_vars($themeProps);
             </div>
         </div>
 
+        <label style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;color:#cbd5e1;margin-top:1rem;cursor:pointer">
+            <input type="checkbox" id="muteStreamCheckbox" onchange="onMuteStreamToggle(this.checked)">
+            Mute streaming video while alarms play
+            <span style="color:#94a3b8;font-size:.72rem">&nbsp;(YouTube &amp; Vimeo only)</span>
+        </label>
+
         <div class="timer-level-btns">
             <button class="btn-save" onclick="saveSoundSettings()">Save</button>
             <button class="btn-close-panel" onclick="closeSoundSettings()">Close</button>
@@ -1481,6 +1487,8 @@ var SOUNDS = {
 };
 var warningFired = false;
 var endTimerFired = false;
+var preMuteWarningFired = false;
+var preMuteEndFired = false;
 
 // ─── Formatting helpers ───────────────────────────────────
 function fmtTime(secs) {
@@ -1742,6 +1750,8 @@ function pollState() {
                 prevLevel = j.timer.current_level;
                 warningFired = false;
                 endTimerFired = false;
+                preMuteWarningFired = false;
+                preMuteEndFired = false;
             }
         }
         // Don't overwrite levels while the editor panel is open (user may be editing)
@@ -1791,10 +1801,24 @@ function startLocalTick() {
         if (!TIMER.is_running) return;
         TIMER.time_remaining_seconds--;
 
+        // Pre-mute stream 3 seconds before the warning beep, so the alarm cuts in cleanly.
+        // The alarm's own muteStreamForAlarm call 3s later will refresh the unmute timer.
+        if (SOUNDS.warning_seconds > 0 && !preMuteWarningFired && TIMER.time_remaining_seconds === SOUNDS.warning_seconds + 3) {
+            preMuteWarningFired = true;
+            muteStreamForAlarm(7000);  // 3s pre + ~1s warning + 3s post
+        }
+
         // Warning alert
         if (SOUNDS.warning_seconds > 0 && !warningFired && TIMER.time_remaining_seconds === SOUNDS.warning_seconds) {
             warningFired = true;
             playWarning();
+        }
+
+        // Pre-mute stream 3 seconds before the end-of-level alarm (which itself fires
+        // 3s before the level ends — so the pre-mute lands at remaining=6s).
+        if (!preMuteEndFired && TIMER.time_remaining_seconds === 6) {
+            preMuteEndFired = true;
+            muteStreamForAlarm(9000);  // 3s pre + 3s end alarm + 3s post
         }
 
         // End timer: 3 beeps over 3 seconds before level ends
@@ -1807,6 +1831,8 @@ function startLocalTick() {
             TIMER.time_remaining_seconds = 0;
             warningFired = false;
             endTimerFired = false;
+            preMuteWarningFired = false;
+            preMuteEndFired = false;
             pollState();
         }
         renderClock();
@@ -1943,6 +1969,7 @@ function playCustomSound(url) {
 // End Timer: default is 5 beeps over 3 seconds
 function playEndTimer() {
     if (!soundEnabled) return;
+    muteStreamForAlarm(6000);  // 3s end alarm + 3s post-padding
     if (SOUNDS.alarm_sound) {
         if (SOUNDS.alarm_sound.indexOf('preset:') === 0) { playPresetEnd(SOUNDS.alarm_sound); return; }
         playCustomSound(SOUNDS.alarm_sound); return;
@@ -1968,6 +1995,7 @@ function playEndTimer() {
 // Start Timer: 1 long beep (1 second, higher pitch)
 function playStartTimer() {
     if (!soundEnabled) return;
+    muteStreamForAlarm(4000);  // 1s tone + 3s post-padding (no pre-padding — user-triggered)
     if (SOUNDS.start_sound) {
         if (SOUNDS.start_sound.indexOf('preset:') === 0) { playPresetEnd(SOUNDS.start_sound); return; }
         playCustomSound(SOUNDS.start_sound); return;
@@ -1992,6 +2020,7 @@ function playStartTimer() {
 // Warning: 5 quick beeps
 function playWarning() {
     if (!soundEnabled) return;
+    muteStreamForAlarm(4000);  // ~1s of beeps + 3s post-padding
     if (SOUNDS.warning_sound) {
         if (SOUNDS.warning_sound.indexOf('preset:') === 0) { playPresetWarning(SOUNDS.warning_sound); return; }
         playCustomSound(SOUNDS.warning_sound); return;
@@ -2160,7 +2189,18 @@ function openSoundSettings() {
     setSelectValue('alarmSoundSelect', SOUNDS.alarm_sound || '');
     setSelectValue('startSoundSelect', SOUNDS.start_sound || '');
     setSelectValue('warningSoundSelect', SOUNDS.warning_sound || '');
+    // Mute-stream-during-alarms toggle — localStorage-backed (per-device viewer pref).
+    var cb = document.getElementById('muteStreamCheckbox');
+    if (cb) {
+        var v = null;
+        try { v = localStorage.getItem('gn.muteStreamDuringAlarms'); } catch (e) {}
+        cb.checked = (v === null) ? true : (v !== 'false');  // default ON
+    }
     document.getElementById('soundOverlay').classList.add('open');
+}
+
+function onMuteStreamToggle(on) {
+    try { localStorage.setItem('gn.muteStreamDuringAlarms', on ? 'true' : 'false'); } catch (e) {}
 }
 function closeSoundSettings() {
     document.getElementById('soundOverlay').classList.remove('open');
@@ -2719,24 +2759,32 @@ function normalizeStreamUrl(raw) {
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
     var h = u.hostname.replace(/^www\./, '').toLowerCase();
     // YouTube — full watch URL, short youtu.be, embed/, live/, shorts/.
+    // `?enablejsapi=1` lets the parent page postMessage mute/unmute commands —
+    // used by the alarm-mute-stream feature.
+    var YT = 'https://www.youtube-nocookie.com/embed/';
+    var YT_PARAMS = '?enablejsapi=1';
     if (h === 'youtube.com' || h === 'm.youtube.com' || h === 'music.youtube.com') {
         var v = u.searchParams.get('v');
-        if (v) return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v);
+        if (v) return YT + encodeURIComponent(v) + YT_PARAMS;
         var m = u.pathname.match(/^\/(?:embed|live|shorts)\/([\w-]{6,})/);
-        if (m) return 'https://www.youtube-nocookie.com/embed/' + m[1];
+        if (m) return YT + m[1] + YT_PARAMS;
     }
     if (h === 'youtu.be') {
         var id = u.pathname.replace(/^\//, '').split('/')[0];
-        if (id) return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id);
+        if (id) return YT + encodeURIComponent(id) + YT_PARAMS;
     }
     // YouTube TV — extract the ID from /watch/<id> and try as a regular YouTube embed.
     // Live TV / subscription-gated content won't actually play (YouTube returns "Video
     // unavailable" inside the iframe), but VOD that's also on plain YouTube will.
     if (h === 'tv.youtube.com') {
         var mtv = u.pathname.match(/^\/watch\/([\w-]{6,})/);
-        if (mtv) return 'https://www.youtube-nocookie.com/embed/' + mtv[1];
+        if (mtv) return YT + mtv[1] + YT_PARAMS;
     }
     if (h === 'youtube-nocookie.com') {
+        // Pass through but ensure enablejsapi is present so alarm-mute works.
+        if (raw.indexOf('enablejsapi=') === -1) {
+            return raw + (raw.indexOf('?') === -1 ? '?' : '&') + 'enablejsapi=1';
+        }
         return raw;
     }
     // Twitch — first path segment is the channel name.
@@ -2774,6 +2822,55 @@ function normalizeStreamUrl(raw) {
     }
     // Unknown host — render nothing (safer than allowing arbitrary embeds).
     return '';
+}
+
+// ─── Stream mute (postMessage to YouTube / Vimeo embeds) ──────────────
+// Used by the alarm system so the streaming video doesn't drown out the alarm
+// beep. YouTube needs `enablejsapi=1` in the embed URL (added by normalizeStreamUrl).
+// Vimeo's Player.js postMessage works without any URL flag. Twitch / Kick / Prime
+// have no public control surface from the parent page — graceful no-op.
+var STREAM_MUTED_BY_ALARM = false;
+var STREAM_UNMUTE_TIMER = null;
+var STREAM_MUTE_WARNED = false;
+
+function streamMute(on) {
+    var frame = document.getElementById('streamingFrame');
+    var src = frame && frame.getAttribute('src');
+    if (!src) return;
+    var win = frame.contentWindow;
+    if (!win) return;
+    var host;
+    try { host = new URL(src).hostname.toLowerCase(); } catch (e) { return; }
+    if (host.indexOf('youtube') !== -1) {
+        // YouTube IFrame API: command is a JSON string posted to the embed window.
+        try { win.postMessage(JSON.stringify({event:'command', func: on ? 'mute' : 'unMute', args: ''}), '*'); } catch (e) {}
+    } else if (host === 'player.vimeo.com') {
+        // Vimeo Player.js wire format: setMuted with a boolean value.
+        try { win.postMessage(JSON.stringify({method: 'setMuted', value: !!on}), '*'); } catch (e) {}
+    } else if (on && !STREAM_MUTE_WARNED) {
+        // Log once so the operator knows why their Twitch/Kick/Prime stream isn't ducking.
+        STREAM_MUTE_WARNED = true;
+        console.info('[gn] Auto-mute during alarm not supported for ' + host + ' — alarm will overlap stream audio.');
+    }
+}
+
+// Mute the stream now, schedule an unmute after `durationMs`. Honours the
+// 'gn.muteStreamDuringAlarms' localStorage toggle (default on). Reentrant: a
+// new alarm while still muted just refreshes the unmute timer.
+function muteStreamForAlarm(durationMs) {
+    try {
+        if (localStorage.getItem('gn.muteStreamDuringAlarms') === 'false') return;
+    } catch (e) {}
+    streamMute(true);
+    STREAM_MUTED_BY_ALARM = true;
+    if (STREAM_UNMUTE_TIMER) clearTimeout(STREAM_UNMUTE_TIMER);
+    STREAM_UNMUTE_TIMER = setTimeout(function() {
+        if (STREAM_MUTED_BY_ALARM) {
+            streamMute(false);
+            STREAM_MUTED_BY_ALARM = false;
+        }
+        STREAM_UNMUTE_TIMER = null;
+    }, durationMs);
 }
 
 // Map element key → list of CSS custom properties it controls.
