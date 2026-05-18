@@ -178,10 +178,14 @@ if (isset($_GET['view']) && $_GET['view'] === 'remote' && !empty($_GET['key'])) 
     $is_guest = !$current;
 }
 
-// Compute corrected remaining time
+// Compute corrected remaining time. updated_at is stored as SQLite
+// datetime('now') (UTC, no tz suffix); strtotime() would otherwise re-parse
+// it in the configured local timezone and the initial PHP render would be
+// off by the local UTC offset (e.g. ~300 min ahead in America/Chicago)
+// until the first JS poll corrects it.
 $remaining = (int)($timer['time_remaining_seconds'] ?? 0);
 if ((int)($timer['is_running'] ?? 0) && !empty($timer['updated_at'])) {
-    $elapsed = time() - strtotime($timer['updated_at']);
+    $elapsed = time() - strtotime($timer['updated_at'] . ' UTC');
     $remaining = max(0, $remaining - $elapsed);
 }
 

@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19250] — 2026-05-18
+
+### Fixed
+- **Tournament timer briefly showed an inflated remaining time on page refresh.** Refreshing `/timer.php` while a level was running would paint a remaining-time value that was off by the configured local UTC offset (e.g. ~300 min ahead on an `America/Chicago` install) for ~1 second, then snap to the correct value once the first `pollState()` response arrived. Root cause: the initial server-render in `timer.php` called `strtotime($timer['updated_at'])` without a timezone suffix. `timer_state.updated_at` is written by SQLite `datetime('now')` (UTC, no tz marker), and `strtotime()` re-parses bare timestamps in the configured PHP timezone — so `time() - strtotime(...)` returned a large negative elapsed, which was then subtracted from the stored remaining and inflated it. The poll path in `timer_dl.php:compute_live_state()` already appended `' UTC'` and produced the correct value, which is why the display flashed and then self-corrected. Fix: append `' UTC'` to the same call in `timer.php:184` so the first PHP-rendered `TIMER.time_remaining_seconds` matches what `compute_live_state()` would return, and add a comment explaining the trap so a future copy-paste doesn't regress it. No DB changes; no operator action needed beyond the usual pull/rebuild.
+
+---
+
 ## [v0.19249] — 2026-05-18
 
 ### Added
