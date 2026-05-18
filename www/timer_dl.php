@@ -592,6 +592,30 @@ if ($action === 'get_themes') {
     exit;
 }
 
+// ─── GET: get_theme (read-only fetch, no side effects on timer_state) ──
+// Used by the theme-export download flow. Returns name + properties for a
+// single theme that the user is allowed to read (default, global, theirs, or
+// in a league they belong to).
+if ($action === 'get_theme') {
+    $theme_id = (int)($_GET['theme_id'] ?? 0);
+    if ($theme_id <= 0) { echo json_encode(['ok' => false, 'error' => 'theme_id required']); exit; }
+    $stmt = $db->prepare(
+        'SELECT id, name, is_default, is_global, league_id, created_by, properties
+         FROM timer_themes
+         WHERE id = ?
+           AND (is_default = 1
+                OR is_global  = 1
+                OR created_by = ?
+                OR league_id IN (SELECT league_id FROM league_members WHERE user_id = ?))'
+    );
+    $stmt->execute([$theme_id, (int)$current['id'], (int)$current['id']]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!$row) { echo json_encode(['ok' => false, 'error' => 'Theme not found']); exit; }
+    $row['properties'] = json_decode($row['properties'] ?? '{}', true) ?: [];
+    echo json_encode(['ok' => true, 'theme' => $row]);
+    exit;
+}
+
 // ─── POST: load_theme ─────────────────────────────────────
 if ($action === 'load_theme') {
     $timer = resolve_timer_from_post($db, $current, $isAdmin);

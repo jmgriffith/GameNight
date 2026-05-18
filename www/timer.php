@@ -1290,6 +1290,9 @@ $themeCss   = timer_theme_css_vars($themeProps);
             <button onclick="saveThemeAs()">Save As...</button>
             <button id="btnDeleteTheme" onclick="deleteTheme()">Delete</button>
             <button id="btnSetDefaultTheme" onclick="setAsDefaultTheme()" style="display:none">Set Default</button>
+            <button onclick="exportTheme()" title="Download selected theme as a JSON file">Export</button>
+            <button onclick="document.getElementById('themeImportFile').click()" title="Load a theme JSON file from another install">Import</button>
+            <input type="file" id="themeImportFile" accept=".json,application/json" style="display:none" onchange="importTheme(this)">
         </div>
 
         <div class="timer-level-btns" style="margin-top:1rem">
@@ -3081,13 +3084,18 @@ function closeSaveThemeModal() {
     document.getElementById('saveThemeOverlay').classList.remove('open');
 }
 
+// When an imported file is in flight we stash its parsed props here so the Save-As
+// confirm flow uses them instead of the in-memory edit state. Cleared on success/cancel.
+var PENDING_IMPORTED_PROPS = null;
+
 function confirmSaveThemeAs() {
     var name = document.getElementById('saveThemeName').value.trim();
     if (!name) { alert('Name required'); return; }
     var scope = document.getElementById('saveThemeScope').value;
     var is_global = scope === 'global' ? 1 : 0;
     var league_id = scope.indexOf('league:') === 0 ? parseInt(scope.slice(7),10) : 0;
-    var props = readThemeFromUI();
+    var imported = !!PENDING_IMPORTED_PROPS;
+    var props = imported ? PENDING_IMPORTED_PROPS : readThemeFromUI();
     var fd = new FormData();
     fd.append('action','save_theme');
     fd.append('csrf_token', CSRF);
@@ -3098,11 +3106,104 @@ function confirmSaveThemeAs() {
     fd.append('properties', JSON.stringify(props));
     fetch('/timer_dl.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(j){
         if (!j.ok) { alert(j.error||'Save failed'); return; }
-        CURRENT_THEME_ID = j.theme_id;
-        window.TIMER_THEME_ID = j.theme_id;
+        // Only re-point the active session to the saved theme when it came from the
+        // live editor — an import shouldn't hijack what's currently on screen.
+        if (!imported) {
+            CURRENT_THEME_ID = j.theme_id;
+            window.TIMER_THEME_ID = j.theme_id;
+        }
+        PENDING_IMPORTED_PROPS = null;
         closeSaveThemeModal();
         fetchThemes();
     });
+}
+
+// Wrap closeSaveThemeModal so cancel also clears any pending import.
+(function(){
+    var orig = closeSaveThemeModal;
+    closeSaveThemeModal = function() {
+        PENDING_IMPORTED_PROPS = null;
+        orig();
+    };
+})();
+
+// Export: download the currently-selected theme (from the library dropdown) as a
+// .gnt.json file. Wraps the properties in a small envelope with a format marker
+// so importTheme can sanity-check uploads.
+function exportTheme() {
+    var tid = parseInt(document.getElementById('themeSelect').value || '0', 10);
+    if (!tid) { alert('Pick a theme first.'); return; }
+    var t = (THEMES_CACHE || []).find(function(x){ return x.id == tid; });
+    if (!t) { alert('Theme not found in cache — try reopening the Library.'); return; }
+    // The cached row may not include properties (depends on get_themes payload);
+    // fetch the full row if missing.
+    if (t.properties) {
+        downloadThemeBlob(t.name, t.properties);
+        return;
+    }
+    fetch('/timer_dl.php?action=get_theme&theme_id=' + tid).then(function(r){return r.json();}).then(function(j){
+        if (!j.ok || !j.theme) { alert(j.error || 'Could not load theme'); return; }
+        downloadThemeBlob(j.theme.name || t.name, j.theme.properties || {});
+    });
+}
+
+function downloadThemeBlob(name, properties) {
+    var envelope = {
+        format: 'gamenight-timer-theme',
+        version: 1,
+        exported_at: new Date().toISOString(),
+        name: name,
+        properties: (typeof properties === 'string') ? JSON.parse(properties) : properties,
+    };
+    var blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var safe = (name || 'theme').replace(/[^A-Za-z0-9._-]+/g, '_').slice(0, 60) || 'theme';
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = safe + '.gnt.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+}
+
+// Import: read a .gnt.json file, validate the envelope, stash properties in
+// PENDING_IMPORTED_PROPS, then open the Save-As modal so the user can pick name + scope.
+function importTheme(input) {
+    if (!input.files || !input.files[0]) return;
+    var f = input.files[0];
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+        var data;
+        try { data = JSON.parse(ev.target.result); }
+        catch (e) { alert('Not a valid JSON file.'); input.value = ''; return; }
+        if (!data || data.format !== 'gamenight-timer-theme' || !data.properties || typeof data.properties !== 'object') {
+            alert('Not a GameNight timer-theme export.');
+            input.value = '';
+            return;
+        }
+        var props = data.properties;
+        if (!props.elements || typeof props.elements !== 'object') {
+            alert('Theme file is missing the expected structure.');
+            input.value = '';
+            return;
+        }
+        PENDING_IMPORTED_PROPS = props;
+        // Open Save-As; pre-fill name from envelope (suffixed so we don't collide).
+        saveThemeAs();
+        // Wait a tick for the modal to render, then prefill the name.
+        setTimeout(function() {
+            var nameEl = document.getElementById('saveThemeName');
+            if (nameEl) {
+                var base = (data.name || 'Imported Theme').replace(/\s+\(imported\)\s*$/i, '');
+                nameEl.value = base + ' (imported)';
+                nameEl.focus();
+                nameEl.select();
+            }
+        }, 80);
+        input.value = '';  // allow re-importing the same file later
+    };
+    reader.onerror = function() { alert('Could not read file.'); input.value = ''; };
+    reader.readAsText(f);
 }
 
 function saveThemeChanges() {
