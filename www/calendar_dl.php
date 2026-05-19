@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $role = in_array($inv_roles[$i] ?? '', ['invitee', 'manager'], true) ? $inv_roles[$i] : 'invitee';
             $phone_norm = $inv_phones[$i] !== '' ? normalize_phone($inv_phones[$i]) : '';
             $sortOrd = $inv_sort_orders[$i] ?? ($i + 1);
-            $ins->execute([$eid, strtolower($inv_usernames[$i]), $phone_norm ?: null, $inv_emails[$i] ?: null, $rsvp, $role, $sortOrd]);
+            $ins->execute([$eid, canonical_username($inv_usernames[$i]), $phone_norm ?: null, $inv_emails[$i] ?: null, $rsvp, $role, $sortOrd]);
         }
     };
 
@@ -280,14 +280,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $form_inv     = [];
                 for ($i = 0; $i < count($inv_usernames); $i++) {
                     if ($inv_usernames[$i] === '') continue;
-                    $uname      = strtolower(trim($inv_usernames[$i]));
+                    $typed      = trim($inv_usernames[$i]);
+                    $uname      = strtolower($typed);            // lowercase key for in-memory comparisons against $old_inv
+                    $canon      = canonical_username($typed);    // canonical case (user's own spelling) for DB storage
                     $form_inv[] = $uname;
                     $rsvp       = in_array($inv_rsvps[$i] ?? '', $valid_rsvps, true) ? ($inv_rsvps[$i] ?: null) : null;
                     $pnorm      = $inv_phones[$i] !== '' ? normalize_phone($inv_phones[$i]) : '';
                     $is_new     = !in_array($uname, $old_inv, true);
                     // New mid-series invitees on recurring events get valid_from = today
                     $vf = ($isRecurring && $is_new) ? $today_date : null;
-                    $ins_base->execute([$id, $uname, $pnorm ?: null, $inv_emails[$i] ?: null, $rsvp, $vf]);
+                    $ins_base->execute([$id, $canon, $pnorm ?: null, $inv_emails[$i] ?: null, $rsvp, $vf]);
                     if ($is_new) $new_inv[] = $uname;
                     // Auto-add to creator's personal contacts
                     auto_add_contact($db, (int)$current['id'], (string)$inv_usernames[$i], (string)($inv_emails[$i] ?? ''), (string)($inv_phones[$i] ?? ''));
@@ -526,7 +528,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $base_row2 = $base_stmt2->fetch() ?: [];
                     $base_approval2 = $base_row2['approval_status'] ?? 'approved';
                     $db->prepare('INSERT INTO event_invites (event_id, username, phone, email, rsvp, occurrence_date, approval_status) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                       ->execute([$eid, strtolower($current['username']), $base_row2['phone'] ?? null, $base_row2['email'] ?? null, $rsvp, $occ_date, $base_approval2]);
+                       ->execute([$eid, $current['username'], $base_row2['phone'] ?? null, $base_row2['email'] ?? null, $rsvp, $occ_date, $base_approval2]);
                 }
             } else {
                 // Non-recurring: update base row
@@ -561,7 +563,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Self-signup: approval gate fires if the event has requires_approval=1.
                 $approval = invite_approval_status($eid, 'self');
                 $db->prepare('INSERT INTO event_invites (event_id, username, phone, email, rsvp, approval_status) VALUES (?, ?, ?, ?, NULL, ?)')
-                   ->execute([$eid, strtolower($current['username']), $udata['phone'] ?? null, $udata['email'] ?? null, $approval]);
+                   ->execute([$eid, $current['username'], $udata['phone'] ?? null, $udata['email'] ?? null, $approval]);
                 db_log_activity($current['id'], "signed up for event id: $eid" . ($approval === 'pending' ? ' (pending approval)' : ''));
                 if ($approval === 'pending') {
                     $signup_pending = true;
@@ -572,7 +574,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && $_SERVER['HTTP_X_REQUESTED_WITH'] === 'XMLHttpRequest') {
-            $inv = ['username' => strtolower($current['username']), 'rsvp' => null, 'approval_status' => $signup_pending ? 'pending' : 'approved'];
+            $inv = ['username' => $current['username'], 'rsvp' => null, 'approval_status' => $signup_pending ? 'pending' : 'approved'];
             if ($isAdmin) { $inv['phone'] = $udata['phone'] ?? null; $inv['email'] = $udata['email'] ?? null; }
             header('Content-Type: application/json');
             echo json_encode(['ok' => true, 'invite' => $inv, 'pending' => $signup_pending]);

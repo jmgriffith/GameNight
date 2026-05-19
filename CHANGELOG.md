@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19251] - 2026-05-19
+
+### Fixed
+- **Admin-created users and event invitees rendered lowercase across the UI.** Display names in the nav greeting, welcome and notification emails, league standings, comment bylines, and event invitee lists showed as lowercase whenever the account was created via Admin Settings (or invited by an admin), while users who self-registered via `register.php` kept their case. Root cause: `username` does double duty as both a display string and a case-insensitive join key in this codebase (all reads use `LOWER(u.username) = LOWER(ei.username)`, and the `event_invites` dedup index is on `LOWER(username)`); admin write paths plus every `event_invites` insert site were calling `strtolower()` while `register.php` and `walkin.php` were not. Fix has three parts. (1) New `canonical_username($typed)` helper in `db.php` looks up the typed name via `LOWER()` and returns the registered user's chosen case, falling back to the trimmed input for ad-hoc invitees who never registered. Used at every `event_invites` write site (`calendar.php:125,563`, `calendar_dl.php:70,290`, `api/v1/events.php:397,1003`, `checkin_dl.php:480`), so however an admin types your name on an invite form, it stores as the case you registered with. (2) Self-signup paths that already had `$current['username']` in hand (already canonical) just unwrap the `strtolower()` wrap: `calendar.php:617,629`, `calendar_dl.php:531,566,577`. (3) Admin add-user form, AJAX endpoint, and CSV import in `admin_settings.php:191,347` and `admin_settings_dl.php:147` drop `strtolower()` from the username before insert; email columns keep theirs. New `CREATE UNIQUE INDEX uq_users_username_nocase ON users (username COLLATE NOCASE)` in `db_init()` closes a latent SQL-level gap where the byte-sensitive `users.username UNIQUE` constraint allowed "Jeremy" and "jeremy" to coexist as separate rows even though every app-layer lookup treated them as the same person. Existing lowercased rows are not migrated; affected users can re-save their name in `/settings` to fix display going forward (the form already preserves case on save). Reported by @jmgriffith on PR #17.
+
+---
+
 ## [v0.19250] — 2026-05-18
 
 ### Fixed

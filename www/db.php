@@ -870,6 +870,11 @@ JSON;
     // Unique index on (event_id, username, occurrence_date) to prevent future duplicates
     try { $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_event_invites_user ON event_invites(event_id, LOWER(username), COALESCE(occurrence_date, ''))"); } catch (Exception $e) {}
 
+    // Enforce case-insensitive uniqueness on users.username at the DB layer.
+    // The inline UNIQUE on the column is byte-sensitive, so "Jeremy" and "jeremy"
+    // could coexist even though every app-layer lookup treats them as the same user.
+    try { $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_nocase ON users (username COLLATE NOCASE)"); } catch (Exception $e) {}
+
     // Calendar's main month/week query filters by start_date and end_date. Without
     // these indexes the planner full-scans events on every page load.
     try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_events_start_date ON events(start_date)"); } catch (Exception $e) {}
@@ -1442,6 +1447,18 @@ function normalize_phone(string $phone): string {
         return substr($digits, 0, 3) . '-' . substr($digits, 3, 3) . '-' . substr($digits, 6, 4);
     }
     return $phone; // unrecognized format — store as entered
+}
+
+// Resolve a typed username to the registered user's chosen case, so invitee
+// names render the way the user spelled their own name when they registered.
+// Falls back to the trimmed input for ad-hoc invitees who never registered.
+function canonical_username(string $typed): string {
+    $typed = trim($typed);
+    if ($typed === '') return '';
+    $stmt = get_db()->prepare('SELECT username FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1');
+    $stmt->execute([$typed]);
+    $row = $stmt->fetchColumn();
+    return $row !== false ? $row : $typed;
 }
 
 function get_client_ip(): string {
