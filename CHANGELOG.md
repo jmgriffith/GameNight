@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19252] — 2026-05-20
+
+### Changed
+- **Changing the site timezone now re-anchors every existing event so their real times are preserved.** Event `start_time`/`end_time` are stored as wall-clock in the site timezone and converted to each viewer's timezone on display (`event_display_times()`), with the save path converting the host's input from their tz into the site tz. This design is correct only while the site timezone stays fixed: previously, changing it in Admin → Settings silently reinterpreted every stored wall-clock in the new zone, shifting every event's displayed time for every viewer (and desyncing the UTC reminder schedule). This bit a real install when the admin changed the home zone while debugging — a 7:30pm event jumped to 12:30pm/6:30am as the anchor moved. Fix: new `rebase_event_times_for_tz_change($db, $oldTz, $newTz)` in `db.php` converts every timed event's stored wall-clock from the old anchor to the new one (preserving the absolute instant) inside a transaction; both `general`-action handlers (`admin_settings_dl.php` and `admin_settings.php`) call it before persisting the new `timezone` setting and log the change with the count of events re-anchored. Because the absolute instant is preserved, no viewer's displayed time changes and UTC-scheduled reminders stay valid, so the timezone setting is now safe to change. All-day events (no `start_time`) are date-only and tz-agnostic and are left untouched. Chosen over a full UTC-storage refactor (which would touch every time read/write path and need a data migration) because it makes the failure mode impossible with one helper plus the single settings-save path. No migration runs against existing data; the guard only fires on future timezone changes. The Admin Settings timezone field now documents the behavior.
+
+---
+
 ## [v0.19251] - 2026-05-19
 
 ### Fixed

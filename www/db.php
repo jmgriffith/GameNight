@@ -1224,6 +1224,73 @@ function display_timezone(?int $user_id = null): string {
 }
 
 /**
+ * Re-anchor every timed event's stored wall-clock from $oldTz to $newTz so each
+ * event keeps its real absolute instant when the site timezone is changed.
+ *
+ * Event times are stored as wall-clock in the site timezone, so naively changing
+ * the site tz would silently shift every event's displayed time (and desync the
+ * UTC reminder schedule). By converting the stored wall-clock through old->new,
+ * the absolute instant is preserved: no viewer's displayed time changes, and
+ * reminders (stored in UTC) stay valid. All-day events (no start_time) are
+ * date-only and tz-agnostic, so they are left untouched. Returns events updated.
+ *
+ * Call this BEFORE persisting the new timezone setting. Safe to nest inside an
+ * existing transaction; rolls back its own work and returns 0 on failure.
+ */
+function rebase_event_times_for_tz_change(PDO $db, string $oldTz, string $newTz): int {
+    if ($oldTz === $newTz || $oldTz === '' || $newTz === '') return 0;
+    $known = DateTimeZone::listIdentifiers();
+    if (!in_array($oldTz, $known, true) || !in_array($newTz, $known, true)) return 0;
+
+    $from = new DateTimeZone($oldTz);
+    $to   = new DateTimeZone($newTz);
+
+    $rows = $db->query(
+        "SELECT id, start_date, start_time, end_date, end_time
+           FROM events
+          WHERE start_time IS NOT NULL AND start_time <> ''"
+    )->fetchAll(PDO::FETCH_ASSOC);
+    if (!$rows) return 0;
+
+    $upd = $db->prepare('UPDATE events SET start_date=?, start_time=?, end_date=?, end_time=? WHERE id=?');
+    $ownTxn = !$db->inTransaction();
+    if ($ownTxn) $db->beginTransaction();
+    try {
+        $n = 0;
+        foreach ($rows as $r) {
+            $startDt = new DateTime($r['start_date'] . ' ' . $r['start_time'], $from);
+            $startDt->setTimezone($to);
+            $newSd = $startDt->format('Y-m-d');
+            $newSt = $startDt->format('H:i');
+
+            $newEd = null; $newEt = null;
+            if (!empty($r['end_time'])) {
+                // End instant uses the explicit end_date if set, else the ORIGINAL start_date.
+                $endBase = $r['end_date'] ?: $r['start_date'];
+                $endDt = new DateTime($endBase . ' ' . $r['end_time'], $from);
+                $endDt->setTimezone($to);
+                $newEt = $endDt->format('H:i');
+                $endDate = $endDt->format('Y-m-d');
+                // Mirror the editor convention: only store end_date when it differs from start.
+                $newEd = ($endDate !== $newSd) ? $endDate : null;
+            } elseif (!empty($r['end_date'])) {
+                // Multi-day span without an end time: dates are tz-agnostic, keep as-is.
+                $newEd = $r['end_date'];
+            }
+
+            $upd->execute([$newSd, $newSt, $newEd, $newEt, $r['id']]);
+            $n++;
+        }
+        if ($ownTxn) $db->commit();
+        return $n;
+    } catch (Throwable $e) {
+        if ($ownTxn && $db->inTransaction()) $db->rollBack();
+        error_log('[GameNight] rebase_event_times_for_tz_change failed: ' . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
  * Returns the approval_status a new event_invites row should be created with,
  * given the source of the signup:
  *   - 'creator' — added by the creator/manager via the editor (always 'approved')

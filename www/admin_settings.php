@@ -154,7 +154,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 set_setting('site_name', $site_name);
                 $site_url = trim($_POST['site_url'] ?? '');
                 set_setting('site_url', $site_url);
-                if ($timezone !== '') set_setting('timezone', $timezone);
+                if ($timezone !== '') {
+                    // Re-anchor existing event times so changing the site tz preserves their
+                    // real instants (never silently shifts displayed times). Must run before
+                    // the new tz is persisted.
+                    $old_tz = get_setting('timezone', 'UTC');
+                    if ($timezone !== $old_tz) {
+                        $rebased = rebase_event_times_for_tz_change($db, $old_tz, $timezone);
+                        db_log_activity($current['id'], "changed timezone {$old_tz} -> {$timezone} (re-anchored {$rebased} event(s))");
+                    }
+                    set_setting('timezone', $timezone);
+                }
                 set_setting('allow_registration', isset($_POST['allow_registration']) ? '1' : '0');
                 set_setting('allow_user_events', isset($_POST['allow_user_events']) ? '1' : '0');
                 set_setting('show_landing_page', isset($_POST['show_landing_page']) ? '1' : '0');
@@ -1072,7 +1082,7 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
                             </option>
                         <?php endforeach; ?>
                     </select>
-                    <p class="hint">Current server time: <strong><?= date('Y-m-d H:i:s') ?></strong></p>
+                    <p class="hint">The home timezone all events are anchored to. Changing it re-anchors every existing event so their actual times are preserved (no event shifts). Current server time: <strong><?= date('Y-m-d H:i:s') ?></strong></p>
                 </div>
                 <div class="form-group" style="margin-top:.5rem">
                     <label class="setting-toggle">
