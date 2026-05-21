@@ -108,6 +108,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
 
+        // ── Check GitHub for a newer version now (admin "Check now") ──
+        if ($action === 'check_update') {
+            if (run_update_check(true)) {
+                $_SESSION['flash'] = update_available()
+                    ? ['type' => 'success', 'msg' => 'Update available: v' . get_setting('latest_version') . ' — you are running v' . APP_VERSION . '.']
+                    : ['type' => 'success', 'msg' => 'You are running the latest version (v' . APP_VERSION . ').'];
+            } else {
+                $_SESSION['flash'] = ['type' => 'error', 'msg' => 'Could not reach the update server. Please try again later.'];
+            }
+        }
+
         // ── Backup restore (upload) ──
         if ($action === 'backup_restore') {
             if (!isset($_FILES['backup_file']) || $_FILES['backup_file']['error'] !== UPLOAD_ERR_OK) {
@@ -1036,6 +1047,18 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
             <div class="stat-card">
                 <div class="label">Version</div>
                 <div class="value" style="font-size:1.1rem"><?= htmlspecialchars(APP_VERSION) ?></div>
+                <?php if (update_available()): ?>
+                <div style="margin-top:.35rem;font-size:.78rem;color:#92400e">
+                    Update available: v<?= htmlspecialchars(get_setting('latest_version')) ?>
+                    &middot; <a href="<?= htmlspecialchars(CHANGELOG_URL) ?>" target="_blank" rel="noopener">changelog</a>
+                </div>
+                <?php endif; ?>
+                <form method="post" action="/admin_settings.php?tab=dashboard" style="margin-top:.4rem">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(csrf_token()) ?>">
+                    <input type="hidden" name="tab" value="dashboard">
+                    <input type="hidden" name="action" value="check_update">
+                    <button type="submit" class="btn btn-outline" style="padding:.15rem .6rem;font-size:.72rem">Check now</button>
+                </form>
             </div>
         </div>
 

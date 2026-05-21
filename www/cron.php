@@ -197,4 +197,12 @@ try {
     error_log('cron vacuum failed: ' . $e->getMessage());
 }
 
+// Check GitHub for a newer release (at most once per 24h). Guarded so a network
+// hang or error can never break the rest of cron. Admins see a nav dot when behind.
+try {
+    run_update_check();
+} catch (\Throwable $e) {
+    error_log('cron update check failed: ' . $e->getMessage());
+}
+
 echo "OK: done.\n";

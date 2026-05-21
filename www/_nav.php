@@ -8,6 +8,9 @@
  */
 $_nu                   = $nav_user ?? $current ?? $user ?? null;
 $_active               = $nav_active ?? '';
+// Admin-only "update available" dot on the Site Settings link.
+$_show_update_dot      = ($_nu && ($_nu['role'] ?? '') === 'admin'
+                          && function_exists('update_available') && update_available());
 $_banner               = get_setting('banner_path', '');
 $_header_banner        = get_setting('header_banner_path', '');
 $_header_banner_height = max(20, min(200, (int)get_setting('header_banner_height', '140')));
@@ -65,7 +68,7 @@ $_accent        = get_setting('accent_color', '');
                         <a href="/contacts.php" class="nav-mobile-link<?= $_active === 'contacts' ? ' active' : '' ?>">Contacts</a>
                         <?php if ($_nu && $_nu['role'] === 'admin'): ?>
                         <a href="/admin_posts.php" class="nav-mobile-link<?= $_active === 'posts' ? ' active' : '' ?>">Posts</a>
-                        <a href="/admin_settings.php" class="nav-mobile-link<?= $_active === 'site-settings' ? ' active' : '' ?>">Site Settings</a>
+                        <a href="/admin_settings.php" class="nav-mobile-link<?= $_active === 'site-settings' ? ' active' : '' ?>">Site Settings<?php if ($_show_update_dot): ?> <span class="nav-update-dot" title="Update available: v<?= htmlspecialchars(get_setting('latest_version')) ?>"></span><?php endif; ?></a>
                         <?php endif; ?>
                         <a href="/timer.php" class="nav-mobile-link">Tournament Timer</a>
                         <div class="nav-mobile-divider"></div>
@@ -129,7 +132,7 @@ $_accent        = get_setting('accent_color', '');
         <?php endif; ?>
         <?php if ($_nu && $_nu['role'] === 'admin'): ?>
             <a href="/admin_posts.php"<?= $_active === 'posts' ? ' class="active"' : '' ?>>Posts</a>
-            <a href="/admin_settings.php"<?= $_active === 'site-settings' ? ' class="active"' : '' ?>>Site Settings</a>
+            <a href="/admin_settings.php"<?= $_active === 'site-settings' ? ' class="active"' : '' ?>>Site Settings<?php if ($_show_update_dot): ?> <span class="nav-update-dot" title="Update available: v<?= htmlspecialchars(get_setting('latest_version')) ?>"></span><?php endif; ?></a>
         <?php endif; ?>
     </div>
 </nav>
@@ -161,6 +164,7 @@ nav.nav-collapsed .nav-top{justify-content:space-between}
 .nav-help-sub{display:none}
 .nav-help-group.open .nav-help-sub{display:block}
 .nav-help-sub a{padding-left:1.85rem}
+.nav-update-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-left:.35rem;vertical-align:middle;box-shadow:0 0 0 2px rgba(245,158,11,.25)}
 </style>
 <script>
 function toggleNavCollapse(){

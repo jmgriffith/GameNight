@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19301] — 2026-05-21
+
+### Added
+- **Admins are notified when a newer version is available.** A small amber dot now appears on the **Site Settings** nav link (admins only) whenever the running `APP_VERSION` is older than the latest version published to the public GitHub repo, so an operator knows their install has fallen behind `main` and should `git pull`. Mechanism: `www/cron.php` runs a once-per-24h `run_update_check()` (gated with a `latest_version_checked_at` timestamp, the same pattern as the weekly VACUUM) that `curl`s the raw `www/version.php` from `https://raw.githubusercontent.com/Isorgcom/GameNight/main/...`, regexes out `APP_VERSION`, and caches it in `site_settings.latest_version` — no per-request network calls and no auth (the repo is public, and there are no GitHub releases/tags to key off). New helpers in `db.php`: `fetch_remote_version()` (returns the remote version or null, swallowing all errors so a GitHub blip never breaks cron or clears a known-good value), `run_update_check(bool $force)` (returns whether a fetch succeeded), and `update_available()` (a cached `version_compare(APP_VERSION, latest, '<')`). The dot is gated behind `$_nu['role'] === 'admin' && update_available()` in `_nav.php` and rendered in both the dropdown and desktop nav, with the available version in its `title`; its CSS is inlined in the nav partial (consistent with the un-versioned `style.css` cache caveat). The admin dashboard's existing **Version** stat card (`admin_settings.php`) now shows "Update available: vX · changelog" when behind, plus a **Check now** button that forces an immediate re-check and reports the result via the standard flash/`alert` path. New version-source constants `UPDATE_SOURCE_URL` and `CHANGELOG_URL` live in `www/version.php`. Admin-only and in-app only — no emails, no banner, no footer change.
+
+---
+
 ## [v0.19300] — 2026-05-21
 
 ### Added
