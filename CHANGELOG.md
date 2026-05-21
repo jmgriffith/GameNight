@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19302] - 2026-05-21
+
+### Added
+- **Search-engine and social-share metadata (SEO).** The public surface can now be found by search engines and previewed cleanly when links are shared. Added `www/robots.txt`, which allows crawling of public pages, disallows login-gated or no-content endpoints (`/api/`, `/admin_settings.php`, `/admin_posts.php`, `/settings.php`, `/checkin.php`, `/walkin.php`, `/timer.php`, `/cron.php`, the password and verification flows, and `/s/` short links), and points crawlers to the sitemap. Added a generated `www/sitemap.php` served at `/sitemap.xml` via an `.htaccess` rewrite, listing the public pages (homepage, Host and Guest guides, register, login, terms, privacy) with absolute URLs built from `get_site_url()`. A new `render_seo_meta($title, $description, $path)` helper in `db.php` emits a meta description, a canonical link, Open Graph tags (type, site_name, title, description, url, image), and Twitter card tags; `index.php` and both help guides now call it. The Open Graph and Twitter image uses the configured header banner, falling back to the site banner; pages keep their own `<title>`. Only the public marketing pages are indexed, never login-gated content. Operator note: after deploying, verify the domain in Google Search Console (and Bing Webmaster Tools), submit `sitemap.xml`, and request indexing of the homepage.
+
+---
+
 ## [v0.19301] — 2026-05-21
 
 ### Added

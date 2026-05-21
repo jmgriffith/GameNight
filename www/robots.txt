@@ -1,0 +1,24 @@
+User-agent: *
+Allow: /
+
+# Private app surfaces and non-content endpoints (login-gated or no SEO value)
+Disallow: /api/
+Disallow: /admin_settings.php
+Disallow: /admin_posts.php
+Disallow: /settings.php
+Disallow: /checkin.php
+Disallow: /walkin.php
+Disallow: /walkin_display.php
+Disallow: /timer.php
+Disallow: /cast_receiver.php
+Disallow: /cron.php
+Disallow: /cron_drain.php
+Disallow: /logout.php
+Disallow: /forgot_password.php
+Disallow: /reset_password.php
+Disallow: /verify_email.php
+Disallow: /verify_phone.php
+Disallow: /resend_verification.php
+Disallow: /s/
+
+Sitemap: https://gamenight.poker/sitemap.xml

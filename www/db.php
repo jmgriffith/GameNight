@@ -1086,6 +1086,35 @@ function set_setting(string $key, string $value): void {
 }
 
 /**
+ * Emit SEO + social-share meta tags into a page <head>. Pages keep their own
+ * <title>; this adds the description, canonical link, Open Graph, and Twitter
+ * card tags so search snippets and shared-link previews look right.
+ * $path is the request path relative to the site root ('' for the homepage,
+ * 'help-hosts.php' for a page, etc.).
+ */
+function render_seo_meta(string $title, string $description, string $path = ''): void {
+    $site   = get_site_url();
+    $url    = $site . '/' . ltrim($path, '/');
+    $name   = get_setting('site_name', 'Game Night');
+    $img    = get_setting('header_banner_path', '');
+    if ($img === '') $img = get_setting('banner_path', '');
+    $imgAbs = $img !== '' ? $site . $img : '';
+    $e = fn(string $s): string => htmlspecialchars($s, ENT_QUOTES);
+    echo "\n    <meta name=\"description\" content=\"" . $e($description) . "\">";
+    echo "\n    <link rel=\"canonical\" href=\"" . $e($url) . "\">";
+    echo "\n    <meta property=\"og:type\" content=\"website\">";
+    echo "\n    <meta property=\"og:site_name\" content=\"" . $e($name) . "\">";
+    echo "\n    <meta property=\"og:title\" content=\"" . $e($title) . "\">";
+    echo "\n    <meta property=\"og:description\" content=\"" . $e($description) . "\">";
+    echo "\n    <meta property=\"og:url\" content=\"" . $e($url) . "\">";
+    if ($imgAbs !== '') echo "\n    <meta property=\"og:image\" content=\"" . $e($imgAbs) . "\">";
+    echo "\n    <meta name=\"twitter:card\" content=\"" . ($imgAbs !== '' ? 'summary_large_image' : 'summary') . "\">";
+    echo "\n    <meta name=\"twitter:title\" content=\"" . $e($title) . "\">";
+    echo "\n    <meta name=\"twitter:description\" content=\"" . $e($description) . "\">";
+    if ($imgAbs !== '') echo "\n    <meta name=\"twitter:image\" content=\"" . $e($imgAbs) . "\">";
+}
+
+/**
  * Fetch the latest published APP_VERSION from the public GitHub repo.
  * Returns the version string (e.g. "0.19301") or null on any failure —
  * no exceptions escape, so callers can treat null as "couldn't check".
