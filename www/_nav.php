@@ -69,8 +69,13 @@ $_accent        = get_setting('accent_color', '');
                         <?php endif; ?>
                         <a href="/timer.php" class="nav-mobile-link">Tournament Timer</a>
                         <div class="nav-mobile-divider"></div>
-                        <a href="/help-hosts.php">Host Guide</a>
-                        <a href="/help-guests.php">Guest Guide</a>
+                        <div class="nav-help-group<?= $_active === 'help' ? ' open' : '' ?>">
+                            <button type="button" class="nav-help-toggle" onclick="this.parentElement.classList.toggle('open');">Help <span class="nav-help-caret" aria-hidden="true">&#9656;</span></button>
+                            <div class="nav-help-sub">
+                                <a href="/help-hosts.php">Host Guide</a>
+                                <a href="/help-guests.php">Guest Guide</a>
+                            </div>
+                        </div>
                         <div class="nav-mobile-divider"></div>
                         <a href="/settings.php"<?= $_active === 'settings' ? ' class="active"' : '' ?>>My Settings</a>
                         <a href="/logout.php" class="nav-dropdown-signout">Sign out</a>
@@ -84,8 +89,13 @@ $_accent        = get_setting('accent_color', '');
                         <a href="/timer.php" class="nav-mobile-link">Tournament Timer</a>
                         <div class="nav-mobile-divider"></div>
                         <?php endif; ?>
-                        <a href="/help-hosts.php">Host Guide</a>
-                        <a href="/help-guests.php">Guest Guide</a>
+                        <div class="nav-help-group<?= $_active === 'help' ? ' open' : '' ?>">
+                            <button type="button" class="nav-help-toggle" onclick="this.parentElement.classList.toggle('open');">Help <span class="nav-help-caret" aria-hidden="true">&#9656;</span></button>
+                            <div class="nav-help-sub">
+                                <a href="/help-hosts.php">Host Guide</a>
+                                <a href="/help-guests.php">Guest Guide</a>
+                            </div>
+                        </div>
                         <div class="nav-mobile-divider"></div>
                         <?php if (get_setting('allow_registration', '1') === '1'): ?>
                         <a href="/register.php">Sign Up</a>
@@ -144,6 +154,13 @@ nav.nav-collapsed .nav-banner-img{max-height:24px !important}
 nav.nav-collapsed .nav-hamburger{font-size:1rem}
 nav.nav-collapsed .nav-dropdown-wrap{position:static}
 nav.nav-collapsed .nav-top{justify-content:space-between}
+.nav-help-toggle{display:flex;align-items:center;gap:.4rem;width:100%;box-sizing:border-box;padding:.6rem 1rem;background:none;border:none;cursor:pointer;color:#94a3b8;font:inherit;font-size:.875rem;text-align:left}
+.nav-help-toggle:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-help-caret{font-size:.65rem;transition:transform .15s}
+.nav-help-group.open .nav-help-caret{transform:rotate(90deg)}
+.nav-help-sub{display:none}
+.nav-help-group.open .nav-help-sub{display:block}
+.nav-help-sub a{padding-left:1.85rem}
 </style>
 <script>
 function toggleNavCollapse(){

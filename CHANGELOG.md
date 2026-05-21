@@ -4,6 +4,16 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19253] — 2026-05-21
+
+### Added
+- **Full, illustrated Host Guide walkthrough.** The host help page (`www/help-hosts.php`) was expanded from a breezy six-step overview into a detailed, click-by-click guide covering the whole lifecycle: set up a league → add a roster → create the event → invite guests → adjust the event's settings → track RSVPs → start the game. Each step now names the actual on-screen fields and buttons (e.g. the **Add Event** dialog's Title/Date/Visibility fields, the **Poker / Waitlist / Mute / Approval / Reminders** toggles and the poker config row, the **All Users / Invited** invite picker, the **Start Poker Session** form, and the **Blind Structure** editor and timer controls). Steps 1 and 2 are marked **optional** and **optional-but-recommended** respectively, step 4 notes that players can also be added later during check-in, and step 7 calls out that **payouts are not loaded by default** (the Payouts card starts empty until a split is configured). The guide is illustrated with nine annotated screenshots under `www/img/help/` (`leagues-create`, `contacts-add`, `event-create`, `event-invite`, `event-settings`, `event-rsvps`, `checkin-start`, `blind-structure`, `timer-running`); `www/img/help/README.md` documents the expected captures. A parallel Markdown reference for the same content lives at `docs/hosting-how-to.md`.
+
+### Changed
+- **Host Guide and Guest Guide are now grouped under an expandable "Help" submenu in the nav.** In the hamburger dropdown (`www/_nav.php`), the two standalone guide links collapse under a single **Help ▸** toggle that expands on click and auto-expands when you're already on a help page (`$nav_active === 'help'`). The submenu's CSS is inlined in the nav partial's existing `<style>` block rather than added to `style.css`, because `style.css` is linked without a cache-busting query string — inlining it ensures returning visitors get the styled menu immediately instead of new markup against a stale cached stylesheet. Also corrected the RSVP-tracking step's wording from the non-existent "Guests tab" to the actual **Invites** list label.
+
+---
+
 ## [v0.19252] — 2026-05-20
 
 ### Changed
