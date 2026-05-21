@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19303] - 2026-05-21
+
+### Changed
+- **Landing page got product visuals and a few fixes.** The marketing landing page (`www/_landing.php`) was text-and-icons only; it now leads with a framed screenshot of a live tournament timer under the hero, and adds a "See it in action" band of three captioned screenshots (schedule an event, check players in, track RSVPs) reusing the assets in `www/img/help/`. Structure and accessibility fixes: added a section heading (`<h2>` "Everything you need to run game night") above the feature grid so the outline no longer jumps from H1 to H3, marked the decorative emoji icons `aria-hidden="true"`, and refreshed a stale "ten-minute read" line on the host-guide card. Bug fix: the closing call-to-action used to render an empty heading with no button when open registration is disabled; it now falls back to a Sign In button. The new visuals' CSS is inlined in the partial to avoid the un-versioned `style.css` cache. Also refreshed `timer-running.png` (used by both the landing hero and the Host Guide) with a populated example showing players, prize pool, payouts, and a running clock.
+
+---
+
 ## [v0.19302] - 2026-05-21
 
 ### Added
