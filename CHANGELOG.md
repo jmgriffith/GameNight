@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19304] - 2026-05-22
+
+### Fixed
+- **Week and month view no longer lose your place after saving an event.** Adding or editing an event from week view used to redirect back to the current week regardless of where you started. The event form in `www/calendar.php` now carries a `wk_param` hidden field alongside `month_param`, and the add/edit POST handler is week-aware: it returns you to the originating week in week view (computing the Sunday of a newly added event's start date so the redirect lands on the week that contains it), while month-view behavior is unchanged. The handler also derives the back-navigation month from the visible week when no `?m=` is present in the URL. Contributed by @jmgriffith (#18). Review caught a follow-on bug in that derivation: it was unconditional and overwrote an explicit `?m=` from the URL, which broke the auto-open guard a few lines down so that deep-links to an event outside the current week's month (invite and notification emails, RSVP links, `my_events.php`, and the league "Open" buttons) redirected to themselves until the browser aborted with ERR_TOO_MANY_REDIRECTS. The derivation is now gated on `$mParam === null`, so explicit-month deep-links keep the month they requested and open the event after a single redirect. Verified on the dev instance: the previously looping deep-link now returns 200 with one redirect and opens the event modal.
+
+---
+
 ## [v0.19303] - 2026-05-21
 
 ### Changed
