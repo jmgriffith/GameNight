@@ -1746,6 +1746,7 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
                 <input type="hidden" name="id" id="vDeleteOccId" value="">
                 <input type="hidden" name="occurrence_date" id="vDeleteOccDate" value="">
                 <input type="hidden" name="month_param" value="<?= htmlspecialchars($monthParam) ?>">
+                <input type="hidden" name="wk_param" value="<?= $wkStart !== null ? htmlspecialchars($wkStartStr) : '' ?>">
             </form>
             <form method="post" action="/calendar.php" style="margin:0"
                   onsubmit="return confirm('Delete this event?')">
@@ -1753,6 +1754,7 @@ $token = ($isAdmin || $current) ? csrf_token() : '';
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" id="vDeleteId">
                 <input type="hidden" name="month_param" value="<?= htmlspecialchars($monthParam) ?>">
+                <input type="hidden" name="wk_param" value="<?= $wkStart !== null ? htmlspecialchars($wkStartStr) : '' ?>">
                 <button type="submit" class="btn" style="background:#dc2626;color:#fff">Delete</button>
             </form>
         </div>

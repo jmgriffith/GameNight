@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19305] - 2026-05-22
+
+### Fixed
+- **Deleting an event from week view now keeps you on that week.** Follow-up to the v0.19304 navigation fix: the per-event Delete and per-occurrence delete forms in `www/calendar.php` carried only `month_param`, so a delete submitted from week view fell through to the month-anchored redirect and dropped you back on the *current* week rather than the one you were viewing. Both delete forms now also emit the `wk_param` hidden field (the same one the add/edit form uses), which the existing week-aware redirect handler already consumes. Deletes submitted from week view return to `?wk=<originating week>`; deletes from month view are unchanged. No handler logic changed. Verified on the dev instance: a week-view delete redirects to `?wk=2026-05-17` and a month-view delete to `?m=2026-05`.
+
+---
+
 ## [v0.19304] - 2026-05-22
 
 ### Fixed
