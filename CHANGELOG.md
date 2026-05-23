@@ -4,6 +4,18 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19306] - 2026-05-23
+
+### Added
+- **Blind-structure generator for the tournament timer.** A new **⚙ Generate** button in the Blind Structure editor (`www/timer.php`) builds a full schedule from a few inputs (starting small blind, number of levels, minutes per level, optional break-every-N-levels and break length, and optional big-blind antes from a chosen level) instead of entering every level by hand. The progression is a classic chip-friendly small-blind ladder (25/50/75/100/150/200 and up) scaled to the chosen start and rounded to sensible increments, with the big blind equal to twice the small blind. New JS: `openGenerator()`, `confirmGenerate()`, `generateBlindProgression()`, and `roundNiceBlind()`. Generated levels populate the in-memory structure and still need an explicit Save.
+- **Touch-friendly blind-level reordering.** Levels could previously only be reordered by HTML5 drag-and-drop, which iOS/iPadOS Safari does not fire, so on an iPad there was no way to move a level up or down. Each row now has up/down (▲/▼) buttons (`moveLevel()`) that work on any device, animated with a FLIP transition and a brief highlight on the moved row. The desktop drag path is unchanged, except the dragged ghost is now the whole row (see below).
+- **Crash-safe editing of blind structures.** Edits used to live only in an in-memory array until "Save Changes" was clicked, so closing the editor, navigating away, or an iPad discarding a backgrounded Safari tab silently lost the work. The editor now mirrors in-progress edits to `localStorage` (debounced) and offers to restore them when reopened, shows an unsaved-changes marker on the Save button, confirms before closing with pending edits, and warns on page unload. New helpers: `markLevelsDirty()`, `saveLevelsDraft()`, `maybeRestoreLevelsDraft()`, `discardLevelsDraft()`, and `updateSaveBtnState()`.
+
+### Changed
+- **Reworked the Blind Structure editor layout.** Save Changes and the action buttons (Generate, Add Level, Add Break, Close) moved from the bottom of the editor into a smaller sticky header at the top, pinned together with the preset menu (Load, Save As, Delete, Export, Import) so the primary actions stay reachable without scrolling a long structure. The table's column-header row now sticks directly beneath that header, with its offset measured from the live header height in `syncStickyOffsets()` and recomputed on resize, so scrolling no longer tucks the data rows or the preset menu behind the controls. Dragging a level to reorder now ghosts the whole row as the drag image and dims the original row as a placeholder until it is dropped.
+
+---
+
 ## [v0.19305] - 2026-05-22
 
 ### Fixed

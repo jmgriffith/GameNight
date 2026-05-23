@@ -603,6 +603,51 @@ $themeCss   = timer_theme_css_vars($themeProps);
             color: #e2e8f0;
         }
         .timer-levels-panel h3 { margin: 0 0 1rem; font-size: 1.3rem; }
+        /* Sticky editor header — pins the title, action buttons, AND preset menu
+           together at the top of the (scrollable) panel, so nothing below them is
+           covered when the blind structure is long. */
+        .timer-editor-head {
+            position: sticky;
+            top: 0;
+            z-index: 6;
+            background: #1e293b;
+            margin: -1.5rem -1.5rem 1rem -1.5rem;
+            padding: 1rem 1.5rem 0.7rem 1.5rem;
+            border-bottom: 1px solid #334155;
+        }
+        .timer-editor-titlebar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            padding-right: 2.25rem; /* clear the × close button */
+        }
+        .timer-editor-titlebar h3 { margin: 0 0.35rem 0 0; font-size: 1.1rem; }
+        .timer-editor-titlebar button {
+            background: #334155;
+            color: #e2e8f0;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 0.4rem 0.7rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+        .timer-editor-titlebar button:hover { background: #475569; }
+        .timer-editor-titlebar .btn-save {
+            background: var(--timer-accent);
+            border-color: var(--timer-accent);
+            color: #fff;
+        }
+        .timer-editor-titlebar .btn-save:hover { filter: brightness(0.9); }
+        .timer-editor-titlebar .btn-close-panel {
+            background: #64748b;
+            border-color: #64748b;
+            color: #fff;
+        }
+        .timer-editor-titlebar .btn-save.has-unsaved { box-shadow: 0 0 0 2px rgba(255,255,255,0.45); }
+        /* Preset menu now lives inside the sticky header — trim its outer margin. */
+        .timer-editor-head .timer-preset-bar { margin: 0.55rem 0 0; }
         .timer-preset-bar {
             display: flex;
             gap: 0.5rem;
@@ -636,9 +681,13 @@ $themeCss   = timer_theme_css_vars($themeProps);
         .timer-levels-table th {
             text-align: left;
             padding: 0.4rem;
-            border-bottom: 1px solid #334155;
             color: #94a3b8;
             font-weight: 600;
+            position: sticky;
+            top: var(--levels-head-h, 104px); /* sits just below the sticky header (measured in JS) */
+            z-index: 4;
+            background: #1e293b;
+            box-shadow: inset 0 -1px 0 #334155; /* underline survives sticky + border-collapse */
         }
         .timer-levels-table td {
             padding: 0.35rem 0.4rem;
@@ -646,6 +695,9 @@ $themeCss   = timer_theme_css_vars($themeProps);
         }
         .timer-levels-table tr.is-break td { color: #fbbf24; font-style: italic; }
         .timer-levels-table tr.current-level td { background: rgba(34,197,94,0.15); }
+        .timer-levels-table td { transition: background-color 0.45s ease; }
+        .timer-levels-table tr.lvl-moved td { background: rgba(96,165,250,0.30); }
+        .timer-levels-table tr.lvl-dragging td { opacity: 0.35; }
         .timer-levels-table input[type="number"] {
             background: #0f172a;
             color: #e2e8f0;
@@ -655,6 +707,7 @@ $themeCss   = timer_theme_css_vars($themeProps);
             width: 70px;
             font-size: 0.85rem;
         }
+        .timer-levels-table .lvl-actions { white-space: nowrap; }
         .timer-levels-table .lvl-actions button {
             background: none;
             border: none;
@@ -662,6 +715,15 @@ $themeCss   = timer_theme_css_vars($themeProps);
             cursor: pointer;
             font-size: 1.1rem;
             padding: 0.2rem;
+        }
+        .timer-levels-table .lvl-actions button.lvl-move {
+            font-size: 0.95rem;
+            line-height: 1;
+            padding: 0.3rem 0.25rem;
+        }
+        .timer-levels-table .lvl-actions button:disabled { opacity: 0.25; cursor: default; }
+        .timer-level-btns button.btn-save.has-unsaved {
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.45);
         }
         .timer-level-btns {
             display: flex;
@@ -1222,34 +1284,37 @@ $themeCss   = timer_theme_css_vars($themeProps);
 <!-- Levels editor overlay -->
 <div class="timer-levels-overlay" id="levelsOverlay" onclick="if(event.target===this)closeLevels()">
     <div class="timer-levels-panel" style="position:relative">
-        <button onclick="closeLevels()" style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
-        <h3>Blind Structure</h3>
-        <?php if (!$is_guest): ?>
-        <div class="timer-preset-bar">
-            <select id="presetSelect" onchange="updatePresetButtons()"><option value="">Loading...</option></select>
-            <button onclick="loadPreset()">Load</button>
-            <button onclick="savePresetAs()">Save As...</button>
-            <button id="btnDeletePreset" onclick="deletePreset()">Delete</button>
-            <button id="btnSetDefault" onclick="setAsDefault()" style="display:none">Set Default</button>
-            <button onclick="exportLevels()">Export</button>
-            <button onclick="document.getElementById('importFile').click()">Import</button>
-            <input type="file" id="importFile" accept=".csv" style="display:none" onchange="importLevels(this)">
+        <button onclick="closeLevels()" style="position:absolute;top:0.75rem;right:0.75rem;z-index:7;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <div class="timer-editor-head">
+            <div class="timer-editor-titlebar">
+                <h3>Blind Structure</h3>
+                <button id="btnSaveLevels" class="btn-save" onclick="saveLevels()">Save Changes</button>
+                <button onclick="openGenerator()" title="Build a full structure from a few settings">&#9881; Generate</button>
+                <button onclick="addLevel(false)">+ Add Level</button>
+                <button onclick="addLevel(true)">+ Add Break</button>
+                <button class="btn-close-panel" onclick="closeLevels()">Close</button>
+            </div>
+            <?php if (!$is_guest): ?>
+            <div class="timer-preset-bar">
+                <select id="presetSelect" onchange="updatePresetButtons()"><option value="">Loading...</option></select>
+                <button onclick="loadPreset()">Load</button>
+                <button onclick="savePresetAs()">Save As...</button>
+                <button id="btnDeletePreset" onclick="deletePreset()">Delete</button>
+                <button id="btnSetDefault" onclick="setAsDefault()" style="display:none">Set Default</button>
+                <button onclick="exportLevels()">Export</button>
+                <button onclick="document.getElementById('importFile').click()">Import</button>
+                <input type="file" id="importFile" accept=".csv" style="display:none" onchange="importLevels(this)">
+            </div>
+            <?php else: ?>
+            <div class="timer-preset-bar" style="justify-content:center">
+                <span style="color:#94a3b8;font-size:.8rem"><a href="/register.php" style="color:#60a5fa">Create an account</a> to save presets, export/import blinds</span>
+            </div>
+            <?php endif; ?>
         </div>
-        <?php else: ?>
-        <div class="timer-preset-bar" style="justify-content:center">
-            <span style="color:#94a3b8;font-size:.8rem"><a href="/register.php" style="color:#60a5fa">Create an account</a> to save presets, export/import blinds</span>
-        </div>
-        <?php endif; ?>
         <table class="timer-levels-table">
             <thead><tr><th style="width:3rem">#</th><th>SB</th><th>BB</th><th>Ante</th><th>Min</th><th>Type</th><th></th></tr></thead>
             <tbody id="levelsBody"></tbody>
         </table>
-        <div class="timer-level-btns">
-            <button onclick="addLevel(false)">+ Add Level</button>
-            <button onclick="addLevel(true)">+ Add Break</button>
-            <button class="btn-save" onclick="saveLevels()">Save Changes</button>
-            <button class="btn-close-panel" onclick="closeLevels()">Close</button>
-        </div>
     </div>
 </div>
 
@@ -1275,6 +1340,40 @@ $themeCss   = timer_theme_css_vars($themeProps);
         <div class="timer-level-btns">
             <button class="btn-save" type="button" onclick="confirmSavePresetAs()">Save</button>
             <button class="btn-close-panel" type="button" onclick="closeSavePresetModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Structure generator modal — build a full blind schedule from a few inputs -->
+<div class="timer-levels-overlay" id="genOverlay" onclick="if(event.target===this)closeGenerator()">
+    <div class="timer-levels-panel" style="max-width:460px;position:relative">
+        <button onclick="closeGenerator()" type="button"
+                style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <h3>Generate Structure</h3>
+        <p style="font-size:.8rem;color:#94a3b8;margin:0 0 1rem">Builds a full blind schedule you can then fine-tune. Big blind is always twice the small blind.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;color:#cbd5e1">
+            <label>Starting small blind
+                <input type="number" id="genStartSB" value="25" min="1"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></label>
+            <label>Number of levels
+                <input type="number" id="genCount" value="15" min="1" max="60"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></label>
+            <label>Minutes per level
+                <input type="number" id="genDuration" value="20" min="1"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></label>
+            <label>Antes from level <span style="color:#64748b">(0 = none)</span>
+                <input type="number" id="genAnteFrom" value="0" min="0"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></label>
+            <label>Break every N levels <span style="color:#64748b">(0 = none)</span>
+                <input type="number" id="genBreakEvery" value="0" min="0"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></label>
+            <label>Break length (min)
+                <input type="number" id="genBreakLen" value="10" min="1"
+                       style="display:block;width:100%;margin-top:.3rem;padding:.5rem .65rem;border:1.5px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.95rem"></label>
+        </div>
+        <div class="timer-level-btns">
+            <button class="btn-save" type="button" onclick="confirmGenerate()">Generate</button>
+            <button class="btn-close-panel" type="button" onclick="closeGenerator()">Cancel</button>
         </div>
     </div>
 </div>
@@ -2299,8 +2398,19 @@ function openLevels() {
     levelsCollected = true; // skip collecting from stale/empty DOM
     renderLevelsTable();
     document.getElementById('levelsOverlay').classList.add('open');
+    syncStickyOffsets(); // pin column headers just below the (possibly wrapped) control bar
+    updateSaveBtnState();
+    maybeRestoreLevelsDraft(); // offer to recover edits lost to a reload/tab-discard
+}
+// Measure the sticky control bar so the column-header row can pin directly below
+// it. Re-run on resize because the bar wraps to extra lines on narrow screens.
+function syncStickyOffsets() {
+    var head = document.querySelector('#levelsOverlay .timer-editor-head');
+    var table = document.querySelector('#levelsOverlay .timer-levels-table');
+    if (head && table) table.style.setProperty('--levels-head-h', head.offsetHeight + 'px');
 }
 function closeLevels() {
+    if (levelsDirty && !confirm('You have unsaved changes to the blind structure. They are NOT live yet (a local draft is kept so you can restore them). Close anyway?')) return;
     document.getElementById('levelsOverlay').classList.remove('open');
     document.getElementById('levelsBody').innerHTML = ''; // clear stale inputs
 }
@@ -2320,12 +2430,14 @@ function renderLevelsTable() {
         if (parseInt(lv.level_number) === TIMER.current_level) cls = ' class="current-level"';
         h += '<tr' + cls + ' data-idx="' + i + '" ondragover="onDragOver(event)" ondrop="onDrop(event)">';
         h += '<td draggable="true" ondragstart="onDragStart(event)" ondragend="onDragEnd()" style="cursor:grab;color:#64748b;user-select:none" title="Drag to reorder">&#9776; ' + (i + 1) + '</td>';
-        h += '<td><input type="number" value="' + (brk ? 0 : lv.small_blind) + '" data-idx="' + i + '" data-field="small_blind"' + (brk ? ' disabled' : '') + '></td>';
-        h += '<td><input type="number" value="' + (brk ? 0 : lv.big_blind) + '" data-idx="' + i + '" data-field="big_blind"' + (brk ? ' disabled' : '') + '></td>';
-        h += '<td><input type="number" value="' + (brk ? 0 : lv.ante) + '" data-idx="' + i + '" data-field="ante"' + (brk ? ' disabled' : '') + '></td>';
-        h += '<td><input type="number" value="' + lv.duration_minutes + '" data-idx="' + i + '" data-field="duration_minutes" style="width:55px"></td>';
+        h += '<td><input type="number" value="' + (brk ? 0 : lv.small_blind) + '" data-idx="' + i + '" data-field="small_blind" oninput="markLevelsDirty()"' + (brk ? ' disabled' : '') + '></td>';
+        h += '<td><input type="number" value="' + (brk ? 0 : lv.big_blind) + '" data-idx="' + i + '" data-field="big_blind" oninput="markLevelsDirty()"' + (brk ? ' disabled' : '') + '></td>';
+        h += '<td><input type="number" value="' + (brk ? 0 : lv.ante) + '" data-idx="' + i + '" data-field="ante" oninput="markLevelsDirty()"' + (brk ? ' disabled' : '') + '></td>';
+        h += '<td><input type="number" value="' + lv.duration_minutes + '" data-idx="' + i + '" data-field="duration_minutes" oninput="markLevelsDirty()" style="width:55px"></td>';
         h += '<td>' + (brk ? 'BREAK' : 'Play') + '</td>';
         h += '<td class="lvl-actions">';
+        h += '<button class="lvl-move" onclick="moveLevel(' + i + ', -1)" title="Move up" style="color:#94a3b8"' + (i === 0 ? ' disabled' : '') + '>&#9650;</button>';
+        h += '<button class="lvl-move" onclick="moveLevel(' + i + ', 1)" title="Move down" style="color:#94a3b8"' + (i === LEVELS.length - 1 ? ' disabled' : '') + '>&#9660;</button>';
         h += '<button onclick="insertLevel(' + i + ', false)" title="Insert level here" style="color:#22c55e;font-size:0.9rem">+</button>';
         h += '<button onclick="insertLevel(' + i + ', true)" title="Insert break here" style="color:#fbbf24;font-size:0.9rem">&#9202;</button>';
         h += '<button onclick="removeLevel(' + i + ')" title="Remove">&times;</button>';
@@ -2339,8 +2451,16 @@ function renderLevelsTable() {
 function onDragStart(e) {
     var row = e.currentTarget.closest('tr');
     dragSrcIdx = parseInt(row.dataset.idx);
-    row.style.opacity = '0.4';
     e.dataTransfer.effectAllowed = 'move';
+    // Use the whole level row as the drag image so the entire level floats as a
+    // ghost under the cursor — by default it would be just the small handle cell.
+    if (e.dataTransfer.setDragImage) {
+        var rect = row.getBoundingClientRect();
+        e.dataTransfer.setDragImage(row, e.clientX - rect.left, e.clientY - rect.top);
+    }
+    // Dim the original row as a gap, but only after the ghost has been captured
+    // (a 0ms defer), so the floating copy stays crisp.
+    setTimeout(function() { row.classList.add('lvl-dragging'); }, 0);
 }
 function onDragOver(e) {
     e.preventDefault();
@@ -2364,13 +2484,66 @@ function onDrop(e) {
     var item = LEVELS.splice(dragSrcIdx, 1)[0];
     LEVELS.splice(targetIdx, 0, item);
     renumberLevels();
+    markLevelsDirty();
     renderLevelsTable();
     dragSrcIdx = null;
+}
+
+// ─── Reorder via buttons (works on touch / iPad, unlike HTML5 drag) ───
+// Animated with a FLIP transition: measure old row positions, swap + re-render,
+// then transform each row back to where it was and let it slide into place.
+function moveLevel(idx, dir) {
+    collectLevelsFromTable(); levelsCollected = true;
+    var j = idx + dir;
+    if (j < 0 || j >= LEVELS.length) return;
+
+    var body = document.getElementById('levelsBody');
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // First: record current row tops (keyed by their current position)
+    var oldTops = [];
+    if (body && !reduce) {
+        Array.prototype.forEach.call(body.children, function(r) { oldTops.push(r.getBoundingClientRect().top); });
+    }
+
+    var tmp = LEVELS[idx]; LEVELS[idx] = LEVELS[j]; LEVELS[j] = tmp;
+    renumberLevels();
+    markLevelsDirty();
+    renderLevelsTable();
+
+    if (!body || reduce) return;
+
+    // The clicked row's content now lives at position j; everything else holds
+    // its position except the two that swapped. Map new position -> old position.
+    function oldPosOf(p) { return p === idx ? j : (p === j ? idx : p); }
+    var newRows = Array.prototype.slice.call(body.children);
+
+    // Invert: shift each row back to its pre-swap position with no transition
+    newRows.forEach(function(r, p) {
+        var delta = oldTops[oldPosOf(p)] - r.getBoundingClientRect().top;
+        if (!delta) return;
+        r.style.transition = 'none';
+        r.style.transform = 'translateY(' + delta + 'px)';
+    });
+
+    // Play: next frame, animate the transforms away
+    requestAnimationFrame(function() {
+        newRows.forEach(function(r) {
+            if (!r.style.transform) return;
+            r.style.transition = 'transform 0.18s ease';
+            r.style.transform = '';
+            r.addEventListener('transitionend', function clear() {
+                r.style.transition = ''; r.removeEventListener('transitionend', clear);
+            });
+        });
+        var moved = newRows[j];
+        if (moved) { moved.classList.add('lvl-moved'); setTimeout(function() { moved.classList.remove('lvl-moved'); }, 650); }
+    });
 }
 function onDragEnd() {
     dragSrcIdx = null;
     var rows = document.querySelectorAll('#levelsBody tr');
-    rows.forEach(function(r) { r.style.opacity = ''; r.style.borderTop = ''; r.style.borderBottom = ''; });
+    rows.forEach(function(r) { r.classList.remove('lvl-dragging'); r.style.borderTop = ''; r.style.borderBottom = ''; });
 }
 
 // ─── Insert level at position ────────────────────────────
@@ -2386,6 +2559,7 @@ function insertLevel(beforeIdx, isBreak) {
     }
     LEVELS.splice(beforeIdx + 1, 0, newLv);
     renumberLevels();
+    markLevelsDirty();
     renderLevelsTable();
 }
 
@@ -2401,6 +2575,7 @@ function addLevel(isBreak) {
     }
     LEVELS.push(newLv);
     renumberLevels();
+    markLevelsDirty();
     renderLevelsTable();
 }
 
@@ -2408,6 +2583,7 @@ function removeLevel(idx) {
     collectLevelsFromTable(); levelsCollected = true;
     LEVELS.splice(idx, 1);
     renumberLevels();
+    markLevelsDirty();
     renderLevelsTable();
 }
 
@@ -2439,10 +2615,12 @@ function saveLevels() {
         .then(function(j) {
             if (j.ok) {
                 if (j.preset_id) { CURRENT_PRESET_ID = j.preset_id; loadPresetList(); }
+                discardLevelsDraft(); // edits are now persisted server-side
                 renderAll();
-                var btn = document.querySelector('.timer-level-btns .btn-save');
+                var btn = document.getElementById('btnSaveLevels');
                 if (btn) {
                     var label = j.created_copy ? 'Saved as personal copy!' : 'Saved!';
+                    btn.classList.remove('has-unsaved');
                     btn.textContent = label;
                     btn.style.background = '#16a34a';
                     setTimeout(function() { btn.textContent = 'Save Changes'; btn.style.background = ''; }, 2500);
@@ -2451,6 +2629,126 @@ function saveLevels() {
                 alert(j.error || 'Error saving levels');
             }
         });
+}
+
+// ─── Unsaved-changes tracking + local draft autosave ─────────────────
+// Edits live only in the in-memory LEVELS array until "Save Changes" hits the
+// server. iPadOS aggressively discards backgrounded Safari tabs, so we mirror
+// in-progress edits to localStorage and offer to restore them on return.
+var levelsDirty = false;
+var draftSaveTimer = null;
+function levelsDraftKey() {
+    return 'gnTimerLevelsDraft:' + (SESSION_ID ? ('s' + SESSION_ID) : ('k' + (REMOTE_KEY || 'x')));
+}
+function markLevelsDirty() {
+    levelsDirty = true;
+    updateSaveBtnState();
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(saveLevelsDraft, 500); // debounce rapid typing
+}
+function saveLevelsDraft() {
+    try {
+        collectLevelsFromTable();
+        localStorage.setItem(levelsDraftKey(), JSON.stringify({
+            levels: LEVELS, ts: Date.now(), presetId: CURRENT_PRESET_ID
+        }));
+    } catch (e) { /* private mode / quota — non-fatal */ }
+}
+function discardLevelsDraft() {
+    levelsDirty = false;
+    if (draftSaveTimer) { clearTimeout(draftSaveTimer); draftSaveTimer = null; }
+    try { localStorage.removeItem(levelsDraftKey()); } catch (e) {}
+}
+function updateSaveBtnState() {
+    var btn = document.getElementById('btnSaveLevels');
+    if (!btn) return;
+    if (levelsDirty) {
+        btn.classList.add('has-unsaved');
+        if (btn.textContent.indexOf('Saved') === -1) btn.textContent = 'Save Changes •';
+    } else {
+        btn.classList.remove('has-unsaved');
+        if (btn.textContent.indexOf('Saved') === -1) btn.textContent = 'Save Changes';
+    }
+}
+function maybeRestoreLevelsDraft() {
+    var raw;
+    try { raw = localStorage.getItem(levelsDraftKey()); } catch (e) { return; }
+    if (!raw) return;
+    var d;
+    try { d = JSON.parse(raw); } catch (e) { return; }
+    if (!d || !Array.isArray(d.levels) || !d.levels.length) return;
+    if (JSON.stringify(d.levels) === JSON.stringify(LEVELS)) { return; } // nothing new to restore
+    var when = new Date(d.ts || Date.now());
+    var t = when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (confirm('You have unsaved blind-structure edits from ' + t + ' that were never saved. Restore them?')) {
+        LEVELS = d.levels;
+        renumberLevels();
+        markLevelsDirty();
+        renderLevelsTable();
+    } else {
+        discardLevelsDraft();
+    }
+}
+
+// ─── Blind-structure generator ───────────────────────────────────────
+// Classic chip-friendly small-blind progression (BB = 2*SB). Used as the
+// shape; we scale it to the chosen starting blind and round to nice numbers.
+var BASE_SB_PROGRESSION = [25,50,75,100,150,200,300,400,500,600,800,1000,1200,1500,2000,2500,3000,4000,5000,6000,8000,10000,12000,15000,20000,25000,30000,40000,50000,60000];
+function roundNiceBlind(v) {
+    var step;
+    if (v < 100) step = 25;
+    else if (v < 500) step = 50;
+    else if (v < 2000) step = 100;
+    else if (v < 5000) step = 250;
+    else if (v < 10000) step = 500;
+    else if (v < 50000) step = 1000;
+    else step = 5000;
+    return Math.max(step, Math.round(v / step) * step);
+}
+function generateBlindProgression(startSB, count) {
+    var factor = startSB / BASE_SB_PROGRESSION[0];
+    var arr = [];
+    for (var i = 0; i < count; i++) {
+        var v;
+        if (i === 0) v = startSB;
+        else if (i < BASE_SB_PROGRESSION.length) v = roundNiceBlind(BASE_SB_PROGRESSION[i] * factor);
+        else v = roundNiceBlind(arr[i - 1] * 1.4);
+        if (i > 0 && v <= arr[i - 1]) { // keep strictly increasing
+            v = roundNiceBlind(arr[i - 1] * 1.3 + 1);
+            if (v <= arr[i - 1]) v = arr[i - 1] + (arr[i - 1] >= 1000 ? 500 : (arr[i - 1] >= 100 ? 50 : 25));
+        }
+        arr.push(v);
+    }
+    return arr;
+}
+function openGenerator() { document.getElementById('genOverlay').classList.add('open'); }
+function closeGenerator() { document.getElementById('genOverlay').classList.remove('open'); }
+function gnGenVal(id, def) { var v = parseInt(document.getElementById(id).value); return isNaN(v) ? def : v; }
+function confirmGenerate() {
+    var startSB    = Math.max(1, gnGenVal('genStartSB', 25));
+    var dur        = Math.max(1, gnGenVal('genDuration', 20));
+    var count      = Math.max(1, Math.min(60, gnGenVal('genCount', 15)));
+    var breakEvery = Math.max(0, gnGenVal('genBreakEvery', 0));
+    var breakLen   = Math.max(1, gnGenVal('genBreakLen', 10));
+    var anteFrom   = Math.max(0, gnGenVal('genAnteFrom', 0));
+
+    if (LEVELS.length && !confirm('Replace the current ' + LEVELS.length + ' level(s) with a freshly generated structure?')) return;
+
+    var blinds = generateBlindProgression(startSB, count);
+    var out = [];
+    for (var i = 0; i < count; i++) {
+        var sb = blinds[i], bb = sb * 2;
+        var ante = (anteFrom > 0 && (i + 1) >= anteFrom) ? bb : 0; // big-blind ante
+        out.push({ level_number: 0, small_blind: sb, big_blind: bb, ante: ante, duration_minutes: dur, is_break: 0 });
+        if (breakEvery > 0 && (i + 1) % breakEvery === 0 && i < count - 1) {
+            out.push({ level_number: 0, small_blind: 0, big_blind: 0, ante: 0, duration_minutes: breakLen, is_break: 1 });
+        }
+    }
+    LEVELS = out;
+    renumberLevels();
+    markLevelsDirty();
+    renderLevelsTable();
+    closeGenerator();
 }
 
 function setAsDefault() {
@@ -4349,6 +4647,18 @@ function makePanelDraggable(panel, handle) {
     style.textContent = '.timer-levels-overlay#themeOverlay.open, .timer-levels-overlay#saveThemeOverlay.open { display:flex; align-items:center; justify-content:center; }';
     document.head.appendChild(style);
 })();
+
+// Warn before leaving with unsaved blind-structure edits (a local draft is also
+// kept, but this catches the common "navigate away and lose it" case).
+window.addEventListener('beforeunload', function(e) {
+    if (levelsDirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Keep the sticky column-header offset in sync when the control bar re-wraps.
+window.addEventListener('resize', function() {
+    var ov = document.getElementById('levelsOverlay');
+    if (ov && ov.classList.contains('open')) syncStickyOffsets();
+});
 
 // ─── Init ─────────────────────────────────────────────────
 if (window.TIMER_THEME) applyTheme(window.TIMER_THEME);
