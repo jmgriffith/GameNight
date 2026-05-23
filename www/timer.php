@@ -603,16 +603,24 @@ $themeCss   = timer_theme_css_vars($themeProps);
             color: #e2e8f0;
         }
         .timer-levels-panel h3 { margin: 0 0 1rem; font-size: 1.3rem; }
-        /* Sticky editor header — pins the title, action buttons, AND preset menu
-           together at the top of the (scrollable) panel, so nothing below them is
-           covered when the blind structure is long. */
+        /* #levelsOverlay turns the panel into a flex column: a static header that
+           never scrolls, plus a single scrolling region (.timer-levels-scroll)
+           below it. This makes it impossible for level rows to scroll under the
+           header. Scoped so the other overlays sharing .timer-levels-panel are
+           untouched. */
+        #levelsOverlay .timer-levels-panel {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden; /* scrolling now belongs to .timer-levels-scroll */
+        }
+        /* Fixed editor header — holds the title, action buttons, AND preset menu.
+           It sits outside the scroll region so the blind structure scrolls beneath
+           nothing. */
         .timer-editor-head {
-            position: sticky;
-            top: 0;
-            z-index: 6;
+            flex: 0 0 auto;
             background: #1e293b;
-            margin: -1.5rem -1.5rem 1rem -1.5rem;
-            padding: 1rem 1.5rem 0.7rem 1.5rem;
+            padding: 1.25rem 1.5rem 0.7rem 1.5rem; /* top clears the absolute × button */
             border-bottom: 1px solid #334155;
         }
         .timer-editor-titlebar {
@@ -673,6 +681,14 @@ $themeCss   = timer_theme_css_vars($themeProps);
             cursor: pointer;
         }
         .timer-preset-bar button:hover { background: #475569; }
+        /* The only scrolling region in #levelsOverlay. Re-supplies the horizontal +
+           bottom padding the panel lost when it went to padding:0. */
+        .timer-levels-scroll {
+            flex: 1 1 auto;
+            min-height: 0;   /* let the flex item shrink so IT scrolls (not the panel) */
+            overflow-y: auto;
+            padding: 0 1.5rem 1.5rem; /* no top padding: the sticky th pins flush under the header */
+        }
         .timer-levels-table {
             width: 100%;
             border-collapse: collapse;
@@ -684,7 +700,7 @@ $themeCss   = timer_theme_css_vars($themeProps);
             color: #94a3b8;
             font-weight: 600;
             position: sticky;
-            top: var(--levels-head-h, 104px); /* sits just below the sticky header (measured in JS) */
+            top: 0; /* pins to the top of .timer-levels-scroll */
             z-index: 4;
             background: #1e293b;
             box-shadow: inset 0 -1px 0 #334155; /* underline survives sticky + border-collapse */
@@ -1288,7 +1304,7 @@ $themeCss   = timer_theme_css_vars($themeProps);
         <div class="timer-editor-head">
             <div class="timer-editor-titlebar">
                 <h3>Blind Structure</h3>
-                <button id="btnSaveLevels" class="btn-save" onclick="saveLevels()">Save Changes</button>
+                <button id="btnSaveLevels" class="btn-save" onclick="saveLevels()">Save</button>
                 <button onclick="openGenerator()" title="Build a full structure from a few settings">&#9881; Generate</button>
                 <button onclick="addLevel(false)">+ Add Level</button>
                 <button onclick="addLevel(true)">+ Add Break</button>
@@ -1311,10 +1327,26 @@ $themeCss   = timer_theme_css_vars($themeProps);
             </div>
             <?php endif; ?>
         </div>
-        <table class="timer-levels-table">
-            <thead><tr><th style="width:3rem">#</th><th>SB</th><th>BB</th><th>Ante</th><th>Min</th><th>Type</th><th></th></tr></thead>
-            <tbody id="levelsBody"></tbody>
-        </table>
+        <div class="timer-levels-scroll">
+            <table class="timer-levels-table">
+                <thead><tr><th style="width:3rem">#</th><th>SB</th><th>BB</th><th>Ante</th><th>Min</th><th>Type</th><th></th></tr></thead>
+                <tbody id="levelsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Unsaved-changes confirm (closing the levels editor) -->
+<div class="timer-levels-overlay" id="closeConfirmOverlay" onclick="if(event.target===this)closeCloseConfirm()">
+    <div class="timer-levels-panel" style="max-width:420px;position:relative">
+        <button onclick="closeCloseConfirm()" type="button"
+                style="position:absolute;top:0.75rem;right:0.75rem;background:none;border:none;color:#94a3b8;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&times;</button>
+        <h3>Unsaved changes</h3>
+        <p style="color:#cbd5e1;font-size:.9rem;margin:0 0 1rem">You have unsaved changes to the blind structure. Discard them, or keep editing?</p>
+        <div class="timer-level-btns">
+            <button type="button" onclick="discardLevelsAndClose()" style="background:#dc2626;border-color:#dc2626;color:#fff">Discard</button>
+            <button class="btn-save" type="button" onclick="closeCloseConfirm()">Keep editing</button>
+        </div>
     </div>
 </div>
 
@@ -2398,21 +2430,31 @@ function openLevels() {
     levelsCollected = true; // skip collecting from stale/empty DOM
     renderLevelsTable();
     document.getElementById('levelsOverlay').classList.add('open');
-    syncStickyOffsets(); // pin column headers just below the (possibly wrapped) control bar
     updateSaveBtnState();
     maybeRestoreLevelsDraft(); // offer to recover edits lost to a reload/tab-discard
 }
-// Measure the sticky control bar so the column-header row can pin directly below
-// it. Re-run on resize because the bar wraps to extra lines on narrow screens.
-function syncStickyOffsets() {
-    var head = document.querySelector('#levelsOverlay .timer-editor-head');
-    var table = document.querySelector('#levelsOverlay .timer-levels-table');
-    if (head && table) table.style.setProperty('--levels-head-h', head.offsetHeight + 'px');
-}
 function closeLevels() {
-    if (levelsDirty && !confirm('You have unsaved changes to the blind structure. They are NOT live yet (a local draft is kept so you can restore them). Close anyway?')) return;
+    if (levelsDirty) { document.getElementById('closeConfirmOverlay').classList.add('open'); return; }
+    doCloseLevels();
+}
+// Actually tear down the editor panel (no prompt).
+function doCloseLevels() {
     document.getElementById('levelsOverlay').classList.remove('open');
     document.getElementById('levelsBody').innerHTML = ''; // clear stale inputs
+}
+// "Keep editing" — dismiss the prompt and stay in the editor.
+function closeCloseConfirm() {
+    document.getElementById('closeConfirmOverlay').classList.remove('open');
+}
+// "Discard" — throw away the in-memory edits AND the saved draft, then close.
+// A poll immediately reloads LEVELS from the server (the last-saved structure),
+// reverting anything the user typed.
+function discardLevelsAndClose() {
+    closeCloseConfirm();
+    discardLevelsDraft(); // clears levelsDirty + wipes the localStorage restore-draft
+    updateSaveBtnState();  // reset the Save button label
+    doCloseLevels();
+    pollState(); // editor now closed → LEVELS refreshes to saved state + renderAll()
 }
 
 var dragSrcIdx = null;
@@ -2623,7 +2665,7 @@ function saveLevels() {
                     btn.classList.remove('has-unsaved');
                     btn.textContent = label;
                     btn.style.background = '#16a34a';
-                    setTimeout(function() { btn.textContent = 'Save Changes'; btn.style.background = ''; }, 2500);
+                    setTimeout(function() { btn.textContent = 'Save'; btn.style.background = ''; }, 2500);
                 }
             } else {
                 alert(j.error || 'Error saving levels');
@@ -2632,7 +2674,7 @@ function saveLevels() {
 }
 
 // ─── Unsaved-changes tracking + local draft autosave ─────────────────
-// Edits live only in the in-memory LEVELS array until "Save Changes" hits the
+// Edits live only in the in-memory LEVELS array until "Save" hits the
 // server. iPadOS aggressively discards backgrounded Safari tabs, so we mirror
 // in-progress edits to localStorage and offer to restore them on return.
 var levelsDirty = false;
@@ -2664,10 +2706,10 @@ function updateSaveBtnState() {
     if (!btn) return;
     if (levelsDirty) {
         btn.classList.add('has-unsaved');
-        if (btn.textContent.indexOf('Saved') === -1) btn.textContent = 'Save Changes •';
+        if (btn.textContent.indexOf('Saved') === -1) btn.textContent = 'Save •';
     } else {
         btn.classList.remove('has-unsaved');
-        if (btn.textContent.indexOf('Saved') === -1) btn.textContent = 'Save Changes';
+        if (btn.textContent.indexOf('Saved') === -1) btn.textContent = 'Save';
     }
 }
 function maybeRestoreLevelsDraft() {
@@ -4654,12 +4696,6 @@ window.addEventListener('beforeunload', function(e) {
     if (levelsDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
-// Keep the sticky column-header offset in sync when the control bar re-wraps.
-window.addEventListener('resize', function() {
-    var ov = document.getElementById('levelsOverlay');
-    if (ov && ov.classList.contains('open')) syncStickyOffsets();
-});
-
 // ─── Init ─────────────────────────────────────────────────
 if (window.TIMER_THEME) applyTheme(window.TIMER_THEME);
 renderAll();
@@ -4986,7 +5022,7 @@ function importLevels(input) {
         LEVELS = parsed;
         levelsCollected = true;
         renderLevelsTable();
-        alert('Imported ' + LEVELS.length + ' levels. Click Save Changes to apply.');
+        alert('Imported ' + LEVELS.length + ' levels. Click Save to apply.');
     };
     reader.readAsText(file);
     input.value = '';

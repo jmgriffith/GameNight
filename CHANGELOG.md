@@ -4,6 +4,17 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19307] - 2026-05-23
+
+### Fixed
+- **Blind levels no longer scroll under the editor's sticky header.** The sticky header introduced in v0.19306 lived *inside* the scrolling panel and pinned the column-header row at a JS-measured offset (`syncStickyOffsets()` / `--levels-head-h`); whenever that measurement ran short (the preset bar wraps on narrow widths, fonts load late, `offsetHeight` reads stale) a band of level rows scrolled into the gap and showed through beneath the toolbar. `www/timer.php` now lays the editor panel out as a flex column scoped to `#levelsOverlay`: the header is a static, non-scrolling child and the table moved into a dedicated `.timer-levels-scroll` wrapper that owns the only scroll region, so the `# / SB / BB / Ante / Min / Type` row pins reliably at its top with no peek-through. A `min-height: 0` on that wrapper fixes the flexbox trap that had let the whole column-header row scroll away with the data rows. The now-unnecessary `syncStickyOffsets()` function, its `openLevels()` call, and the `resize` listener were removed. The layout change is scoped so the other modals sharing `.timer-levels-panel` are untouched.
+
+### Changed
+- **Closing the blind-structure editor with unsaved edits now uses an in-app dialog.** The native browser "Close anyway?" `confirm()` was replaced with a styled modal (`closeConfirmOverlay`, modeled on the existing Save-Theme dialog) offering **Discard** or **Keep editing**. Discard clears the in-memory edits and wipes the `localStorage` restore-draft via `discardLevelsDraft()`, then calls `pollState()` so the live structure reverts to the last-saved version immediately; Keep editing (and the dialog's × / backdrop) returns to the editor with edits intact. New helpers `doCloseLevels()`, `closeCloseConfirm()`, and `discardLevelsAndClose()` in `www/timer.php`.
+- **Relabeled the editor's "Save Changes" button to "Save"** in `www/timer.php`, along with its dynamic states ("Save •" while there are unsaved edits, the post-save reset) and the import-confirmation prompt.
+
+---
+
 ## [v0.19306] - 2026-05-23
 
 ### Added
