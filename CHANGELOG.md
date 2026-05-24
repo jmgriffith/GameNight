@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19308] - 2026-05-24
+
+### Fixed
+- **Embedded video stream now appears on remote timer displays.** A remote viewer (`timer.php?view=remote&key=…`, the screen you cast to a TV) showed no streaming video at all. The streaming `<iframe>` (`#streamingWrap`) and the themable image (`#themeImage`) were wrapped in a `<?php if (!$is_remote): ?>` block in `www/timer.php`, so the elements were never emitted on a remote page; `renderAll()` then found `getElementById('streamingWrap')` null and silently bailed, even though the server was sending the stream URL in the remote state payload and the CSP `frame-src` already allowed the embed. Both elements now render for remote views too. Additionally, the long-standing touch-device skip (`IS_TOUCH_DEVICE`, added so cross-origin iframes don't swallow the taps that re-acquire the screen wake lock on phones/tablets) was relaxed for remote views with `|| IS_REMOTE`, since a remote display's purpose is to show the stream and the iframe is a small positioned panel rather than full-screen. Host (control) view behavior is unchanged.
+
+---
+
 ## [v0.19307] - 2026-05-23
 
 ### Fixed

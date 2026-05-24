@@ -1285,16 +1285,15 @@ $themeCss   = timer_theme_css_vars($themeProps);
 <div class="timer-qr" id="qrWrap" title="Scan to view timer on your phone"></div>
 <?php endif; ?>
 
-<?php if (!$is_remote): ?>
-<!-- Themable user image (positioned + resized in edit mode) -->
+<!-- Themable user image + streaming video iframe (positioned + resized in edit mode).
+     Rendered for remote viewers too — the remote screen is the display you'd cast a
+     stream/image onto, so these must exist there for renderAll() to populate them. -->
 <img class="timer-image" id="themeImage" alt="" style="display:none">
-<!-- Streaming video iframe (positioned + resized in edit mode) -->
 <div class="timer-stream" id="streamingWrap" style="display:none">
     <iframe id="streamingFrame" frameborder="0"
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowfullscreen></iframe>
 </div>
-<?php endif; ?>
 
 <?php if (!$is_remote): ?>
 <!-- Levels editor overlay -->
@@ -3336,8 +3335,10 @@ function applyTheme(props) {
         var s = el.streaming || {};
         // Skip the iframe on touch devices: cross-origin iframes capture taps that would
         // otherwise re-acquire the wake lock, which makes "tap anywhere to keep screen on"
-        // unreliable on phones/tablets. URL can still be configured (it shows on desktop/TV).
-        var emb = (s.url && GAME_TYPE !== 'cash' && !IS_TOUCH_DEVICE) ? normalizeStreamUrl(s.url) : '';
+        // unreliable on phones/tablets. Exception: remote display views (?view=remote) are
+        // dedicated screens whose whole purpose is to show the stream, and the iframe is a
+        // positioned panel (not full-screen) so taps elsewhere still re-acquire the lock.
+        var emb = (s.url && GAME_TYPE !== 'cash' && (!IS_TOUCH_DEVICE || IS_REMOTE)) ? normalizeStreamUrl(s.url) : '';
         var inEditNow = document.body.classList.contains('layout-edit');
         streamWrap.style.setProperty('--timer-stream-scale', String(s.scale || 1));
         if (emb) {
