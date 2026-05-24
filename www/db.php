@@ -1086,6 +1086,34 @@ function set_setting(string $key, string $value): void {
 }
 
 /**
+ * Admin-configurable allowlist of extra hosts the tournament-timer streaming
+ * panel may embed (on top of the built-in YouTube/Twitch/Vimeo/Kick/Prime set).
+ * Stored in the `stream_allowed_hosts` setting as a free-form list; this parses
+ * and STRICTLY validates it so the output is safe to splice into a CSP frame-src
+ * directive and into the client-side embed allowlist.
+ *
+ * Each entry may be a bare hostname (sub.example.com) or a single-level wildcard
+ * (*.example.com). Pasted full URLs are tolerated (scheme/path are stripped).
+ * Anything containing CSP-significant characters (spaces, ; , : ' " /) is rejected.
+ * Returns a de-duplicated, lowercased list of host patterns.
+ */
+function stream_allowed_hosts(): array {
+    $raw = get_setting('stream_allowed_hosts', '');
+    if ($raw === '') return [];
+    $out = [];
+    foreach (preg_split('/[\s,]+/', $raw, -1, PREG_SPLIT_NO_EMPTY) as $tok) {
+        $h = strtolower(trim($tok));
+        $h = preg_replace('#^https?://#', '', $h); // tolerate a pasted URL
+        $h = preg_replace('#/.*$#', '', $h);        // drop any path
+        // Bare hostname or "*." + hostname; no ports, no other punctuation.
+        if (preg_match('/^(\*\.)?([a-z0-9-]+\.)+[a-z]{2,}$/', $h)) {
+            $out[$h] = true;
+        }
+    }
+    return array_keys($out);
+}
+
+/**
  * Emit SEO + social-share meta tags into a page <head>. Pages keep their own
  * <title>; this adds the description, canonical link, Open Graph, and Twitter
  * card tags so search snippets and shared-link previews look right.

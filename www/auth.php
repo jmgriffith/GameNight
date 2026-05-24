@@ -9,6 +9,16 @@ header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 // CSP: allow inline scripts/styles (required by Jodit editor), block everything else external.
 // frame-src allows the tournament-timer streaming panel to embed video (YouTube/Twitch/Prime).
+$_frame_src = "frame-src https://www.youtube.com https://www.youtube-nocookie.com "
+    . "https://player.twitch.tv https://www.twitch.tv "
+    . "https://player.vimeo.com "
+    . "https://player.kick.com https://kick.com "
+    . "https://www.primevideo.com https://atv-ps.primevideo.com";
+// Append any admin-configured custom stream hosts (validated to safe host patterns).
+// Wrapped in try/catch so a not-yet-initialised DB (fresh install) can't break the header.
+try {
+    foreach (stream_allowed_hosts() as $_h) { $_frame_src .= ' https://' . $_h; }
+} catch (\Throwable $e) { /* keep the built-in frame-src */ }
 $_csp = implode('; ', [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
@@ -18,15 +28,11 @@ $_csp = implode('; ', [
     "base-uri 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "frame-src https://www.youtube.com https://www.youtube-nocookie.com "
-        . "https://player.twitch.tv https://www.twitch.tv "
-        . "https://player.vimeo.com "
-        . "https://player.kick.com https://kick.com "
-        . "https://www.primevideo.com https://atv-ps.primevideo.com",
+    $_frame_src,
     "media-src 'self' https: data:",
 ]);
 header("Content-Security-Policy: {$_csp}");
-unset($_csp);
+unset($_csp, $_frame_src);
 // HSTS: enforce HTTPS for 1 year (only sent when already on HTTPS)
 if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https')) {
     header('Strict-Transport-Security: max-age=31536000; includeSubDomains');

@@ -4,6 +4,13 @@ All notable changes to GameNight are documented here.
 
 ---
 
+## [v0.19309] - 2026-05-24
+
+### Added
+- **Admin-configurable allowlist of extra video stream hosts for the tournament timer.** The timer's streaming panel only embeds a fixed set of providers (YouTube, Twitch, Vimeo, Kick, Prime Video); any other host was silently rejected by `normalizeStreamUrl()` and would also have been blocked by the CSP `frame-src`. A new **Settings → General → Tournament Timer → "Allowed video stream hosts"** field lets an admin permit additional hosts (e.g. a self-hosted stream). Entries may be bare hostnames or single-level wildcards (`*.example.com`, which conveniently also covers an auth-proxy redirect on a sibling subdomain). A shared `stream_allowed_hosts()` helper in `www/db.php` strictly validates the list (rejecting anything with CSP-significant characters) and feeds two places that must stay in sync: the CSP `frame-src` directive built in `www/auth.php` (wrapped in try/catch so a fresh, un-initialised DB can't break the header) and a client-side `EXTRA_STREAM_HOSTS` allowlist in `www/timer.php`, where `normalizeStreamUrl()` now passes matching URLs through (forced to `https` to avoid mixed-content blocking). Hosts must serve over https and permit being framed. Leaving the field blank preserves the previous built-in-only behavior.
+
+---
+
 ## [v0.19308] - 2026-05-24
 
 ### Fixed

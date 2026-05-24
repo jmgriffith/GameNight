@@ -1590,6 +1590,8 @@ var IS_ADMIN = <?= json_encode($isAdmin) ?>;
 var CAN_CONTROL = <?= json_encode($can_control) ?>;
 var SESSION_ID = <?= json_encode($session ? (int)$session['id'] : null) ?>;
 var REMOTE_KEY = <?= json_encode($remote_key) ?>;
+// Admin-configured extra stream hosts (must mirror the CSP frame-src allowlist in auth.php).
+var EXTRA_STREAM_HOSTS = <?= json_encode(stream_allowed_hosts()) ?>;
 var CSRF = <?= json_encode($csrf) ?>;
 var POLL_INTERVAL = 2000; // everyone polls server every 2s
 // Touch/mobile detection — used to skip rendering the streaming iframe on phones/tablets,
@@ -3162,6 +3164,15 @@ function normalizeStreamUrl(raw) {
     // refuses iframe embedding for consumer URLs; the inspector warns the user.
     if (h === 'primevideo.com' || h === 'amazon.com' || h.endsWith('.amazon.com')) {
         return raw;
+    }
+    // Admin-allowlisted custom hosts (Settings → General → Allowed video stream hosts).
+    // Forced to https because the page is https (an http embed would be mixed-content
+    // blocked). Must stay in sync with the CSP frame-src built in auth.php.
+    var rawHost = u.hostname.toLowerCase();
+    for (var ei = 0; ei < EXTRA_STREAM_HOSTS.length; ei++) {
+        var pat = String(EXTRA_STREAM_HOSTS[ei]).toLowerCase();
+        var hit = (pat.indexOf('*.') === 0) ? rawHost.endsWith(pat.slice(1)) : (rawHost === pat);
+        if (hit) { u.protocol = 'https:'; return u.toString(); }
     }
     // Unknown host — render nothing (safer than allowing arbitrary embeds).
     return '';

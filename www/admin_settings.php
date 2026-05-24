@@ -196,6 +196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 set_setting('default_reminder_offsets', json_encode(array_reverse($__newDefs)));
                 set_setting('donation_url', trim($_POST['donation_url'] ?? ''));
                 set_setting('donation_message', trim($_POST['donation_message'] ?? ''));
+                // Extra hosts the timer streaming panel may embed. Store raw; it is
+                // strictly re-validated on read by stream_allowed_hosts() before use.
+                set_setting('stream_allowed_hosts', trim($_POST['stream_allowed_hosts'] ?? ''));
                 db_log_activity($current['id'], 'updated site settings');
                 $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Settings saved.'];
             }
@@ -1212,6 +1215,19 @@ $dash_posts  = (int)$db->query('SELECT COUNT(*) FROM posts')->fetchColumn();
                            value="<?= htmlspecialchars(get_setting('donation_message', '')) ?>"
                            placeholder="Enjoying Game Night? Help keep the lights on.">
                     <p class="hint">Custom text shown on the banner. If blank, a default message is used.</p>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:1rem 0">
+                <h3 style="font-size:.95rem;margin:0 0 .5rem">Tournament Timer</h3>
+                <div class="form-group">
+                    <label for="stream_allowed_hosts">Allowed video stream hosts</label>
+                    <textarea name="stream_allowed_hosts" id="stream_allowed_hosts" rows="2"
+                              placeholder="pytv.example.com&#10;*.example.com"><?= htmlspecialchars(get_setting('stream_allowed_hosts', '')) ?></textarea>
+                    <p class="hint">Extra hosts the timer's streaming panel may embed, in addition to the built-in
+                       YouTube, Twitch, Vimeo, Kick and Prime Video support. One host per line (or comma-separated).
+                       Use <code>*.example.com</code> to allow all subdomains (handy when a stream redirects through an
+                       auth proxy on a sibling subdomain). Only <code>https</code> embeds work, and the host must permit
+                       being framed. Leave blank to allow only the built-in providers.</p>
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="width:100%;margin-top:.25rem">
